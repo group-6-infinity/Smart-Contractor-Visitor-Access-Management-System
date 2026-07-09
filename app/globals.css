@@ -7,6 +7,18 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
+  --success: oklch(0.65 0.15 150);
+  --success-foreground: oklch(1 0 0);
+  --success-muted: oklch(0.93 0.05 150);
+  --success-muted-foreground: oklch(0.35 0.12 150);
+  --success-border: oklch(0.8 0.1 150);
+
+  --info: oklch(0.6 0.14 240);
+  --info-foreground: oklch(1 0 0);
+  --info-muted: oklch(0.93 0.04 240);
+  --info-muted-foreground: oklch(0.35 0.1 240);
+  --info-border: oklch(0.78 0.09 240);
+
   --background: oklch(1 0 0);
   --foreground: oklch(0.2101 0.0318 264.6645);
   --card: oklch(1 0 0);
@@ -67,6 +79,18 @@
 }
 
 .dark {
+  --success: oklch(0.7 0.16 150);
+  --success-foreground: oklch(0.1797 0.0043 308.1928);
+  --success-muted: oklch(0.25 0.06 150);
+  --success-muted-foreground: oklch(0.75 0.12 150);
+  --success-border: oklch(0.35 0.09 150);
+
+  --info: oklch(0.65 0.14 240);
+  --info-foreground: oklch(0.1797 0.0043 308.1928);
+  --info-muted: oklch(0.25 0.05 240);
+  --info-muted-foreground: oklch(0.75 0.1 240);
+  --info-border: oklch(0.35 0.08 240);
+
   --background: oklch(0.1797 0.0043 308.1928);
   --foreground: oklch(0.8109 0 0);
   --card: oklch(0.1822 0 0);
@@ -182,6 +206,20 @@
   --tracking-wide: calc(var(--tracking-normal) + 0.025em);
   --tracking-wider: calc(var(--tracking-normal) + 0.05em);
   --tracking-widest: calc(var(--tracking-normal) + 0.1em);
+
+  /* Success */
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-success-muted: var(--success-muted);
+  --color-success-muted-foreground: var(--success-muted-foreground);
+  --color-success-border: var(--success-border);
+
+  /* Info */
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-info-muted: var(--info-muted);
+  --color-info-muted-foreground: var(--info-muted-foreground);
+  --color-info-border: var(--info-border);
 }
 
 @layer base {
