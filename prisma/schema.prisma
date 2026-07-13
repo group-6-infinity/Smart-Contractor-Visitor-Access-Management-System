@@ -8,26 +8,28 @@ datasource db {
 }
 
 model Registration {
-  id              String             @id
+  id              String             @id @default(cuid())
   trackingToken   String             @unique
   createdById     String?
   type            RegistrationType
   fullName        String
   company         String
-  email           String             @unique
+  email           String
   phone           String?
   photoPath       String?
   status          RegistrationStatus @default(PENDING)
   rejectionReason String?
   createdAt       DateTime           @default(now())
-  updatedAt       DateTime
+  updatedAt       DateTime?          @updatedAt
   users           users?             @relation(fields: [createdById], references: [id])
   Visit           Visit[]
   documents       documents[]
+
+  @@unique([fullName, email, phone, type])
 }
 
 model Visit {
-  id              String       @id
+  id              String       @id @default(cuid())
   registrationId  String
   purpose         String
   visitDate       DateTime
@@ -37,12 +39,12 @@ model Visit {
   status          VisitStatus  @default(PENDING)
   notes           String?
   createdAt       DateTime     @default(now())
-  updatedAt       DateTime
+  updatedAt       DateTime     @updatedAt
   Registration    Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
 }
 
 model documents {
-  id             String       @id
+  id             String       @id @default(cuid())
   registrationId String
   type           DocumentType
   filePath       String
@@ -52,24 +54,36 @@ model documents {
   verifiedAt     DateTime?
   replacedAt     DateTime?
   createdAt      DateTime     @default(now())
-  updatedAt      DateTime
+  updatedAt      DateTime     @updatedAt
   Registration   Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
   users          users?       @relation(fields: [verifiedById], references: [id])
 }
 
 model users {
-  id           String         @id
+  id           String         @id @default(cuid())
   name         String?
   email        String         @unique
   passwordHash String
   role         Role
   isActive     Boolean        @default(true)
   createdAt    DateTime       @default(now())
-  updatedAt    DateTime
+  updatedAt    DateTime       @updatedAt
   Registration Registration[]
   documents    documents[]
 
   @@unique([name, email])
+}
+
+model Blacklist {
+  id             String   @id @default(cuid())
+  registrationId String?
+  fullName       String
+  email          String
+  reason         String
+  blacklistedBy  String
+  createdAt      DateTime @default(now())
+
+  @@index([email])
 }
 
 enum ConsentStatus {
