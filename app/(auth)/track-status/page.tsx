@@ -45,7 +45,7 @@ export default function TrackStatusPage() {
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center">
-      <section className="grid w-full grid-cols-[2fr_1fr]">
+      <section className="grid w-full md:grid-cols-[2fr_1fr]">
         <div className="mx-auto flex w-full max-w-2xl flex-col items-center justify-center gap-10 p-4">
           <div className="space-y-1 text-center">
             <h1 className="text-2xl font-semibold">Track Registration</h1>
@@ -124,7 +124,7 @@ export default function TrackStatusPage() {
           )}
         </div>
 
-        <figure className="relative block h-svh w-full">
+        <figure className="relative h-svh w-full max-md:hidden md:block">
           <Image
             src="/square-background-test.png"
             alt="square background"
