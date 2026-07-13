@@ -1,6 +1,4 @@
-import { buttonVariants } from "@/components/ui/button";
 import Link from "next/link";
-import { cn } from "@/lib/utils";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { RegComplete } from "@/components/layouts/auth/reg-complete";
@@ -15,16 +13,24 @@ export default async function RegisterCompletePage() {
   return (
     <>
       <AuthLayout>
-        <div className="space-y-10 max-w-2xl overflow-hidden">
+        <div className="max-w-2xl space-y-10 overflow-hidden">
           <RegisterCompleteHeader />
-          <RegComplete token={token} />
+          <RegComplete />
           <p className="border-border text-muted-foreground rounded-md border border-dashed p-3">
             Please save this link to track your registration status and submit
             future visit requests. A tracking link has also been sent to your
             registered email. If you dont see it in your inbox, please check
             your spam folder.
           </p>
+          <div className="w-full flex items-center justify-center">
           <Link
+            href="/track-status"
+            className="w-full mx-auto text-center text-primary text-sm underline underline-offset-4"
+            >
+            Or track using your email here
+          </Link>
+            </div>
+          {/* <Link
             href={`/track-status/${token}`}
             className={cn(
               buttonVariants(),
@@ -32,7 +38,7 @@ export default async function RegisterCompletePage() {
             )}
           >
             Go To Tracking Page
-          </Link>
+          </Link> */}
         </div>
       </AuthLayout>
     </>

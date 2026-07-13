@@ -139,21 +139,22 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const existing = await prisma.registration.findMany({
-      where: { email: email.toLowerCase() },
-      select: {
-        trackingToken: true,
-        email: true,
-        type: true,
-        fullName: true,
-        company: true,
-        status: true,
+    const existing = await prisma.registration.findFirst({
+      where: {
+        fullName,
+        email: email.toLowerCase(),
+        phone,
+        type: type as RegistrationType,
       },
+      select: { id: true },
     });
 
-    if (existing.length > 0) {
+    if (existing) {
       return NextResponse.json(
-        { message: "Email already registered" },
+        {
+          message:
+            "You have already registered with these details for this role",
+        },
         { status: 409 },
       );
     }
@@ -239,7 +240,7 @@ export async function POST(req: NextRequest) {
     } catch {
       console.error("[TELEGRAM] Failed to notify HSE/HR Admin");
     }
-    
+
     try {
       await sendRegistrationEmail({
         to: email,
