@@ -1,4 +1,4 @@
-// import StaffLoginForm from "@/components/layouts/forms/staff-login-forms"
+import StaffLoginForm from "@/components/layouts/forms/staff-login-forms"
 import { jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -19,6 +19,5 @@ export default async function StaffLoginPage() {
   }
 
   if (valid) redirect("/staff/dashboard");
-  return <p>Still on progress</p>;
-  // return <StaffLoginForm />
+  return <StaffLoginForm />
 }
