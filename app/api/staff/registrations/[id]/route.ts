@@ -3,6 +3,7 @@ import { jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { sendTelegramMessage } from "@/lib/telegram";
+import { sendRegistrationEmail } from "@/lib/mailer";
 
 async function getStaffSession() {
   const cookieStore = await cookies();
@@ -19,7 +20,7 @@ async function getStaffSession() {
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const session = await getStaffSession();
   if (!session || !["HSE_ADMIN", "HR_ADMIN"].includes(session.role)) {
@@ -52,7 +53,7 @@ export async function GET(
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const session = await getStaffSession();
   if (!session || !["HSE_ADMIN", "HR_ADMIN"].includes(session.role)) {
@@ -69,13 +70,20 @@ export async function PATCH(
   if (action === "REJECT" && !rejectionReason?.trim()) {
     return NextResponse.json(
       { message: "Rejection reason is required" },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
   const registration = await prisma.registration.findUnique({
     where: { id },
-    select: { id: true, status: true, fullName: true },
+    select: {
+      id: true,
+      status: true,
+      fullName: true,
+      email: true,
+      type: true,
+      trackingToken: true,
+    },
   });
 
   if (!registration) {
@@ -85,7 +93,7 @@ export async function PATCH(
   if (registration.status !== "PENDING") {
     return NextResponse.json(
       { message: "Registration already reviewed" },
-      { status: 409 }
+      { status: 409 },
     );
   }
 
@@ -103,10 +111,23 @@ export async function PATCH(
       "HSE",
       `${action === "APPROVE" ? "✅" : "❌"} <b>Registration ${updated.status}</b>\n\n` +
         `<b>Name:</b> ${updated.fullName}\n` +
-        `<b>Reviewed by:</b> ${session.email}`
+        `<b>Reviewed by:</b> ${session.email}`,
     );
   } catch {
     console.error("[TELEGRAM] notify failed");
+  }
+
+  try {
+    await sendRegistrationEmail({
+      to: registration.email,
+      fullName: registration.fullName,
+      type: registration.type,
+      trackingToken: registration.trackingToken,
+      status: action === "APPROVE" ? "APPROVED" : "REJECTED",
+      reason: action === "REJECT" ? rejectionReason : undefined,
+    });
+  } catch (emailErr) {
+    console.error("[EMAIL] notify failed:", emailErr);
   }
 
   return NextResponse.json({ registration: updated });
