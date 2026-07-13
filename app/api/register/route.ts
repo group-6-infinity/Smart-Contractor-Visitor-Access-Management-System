@@ -166,7 +166,7 @@ export async function POST(req: NextRequest) {
         type: type as RegistrationType,
         fullName,
         company,
-        email,
+        email: email.toLowerCase(),
         phone,
         status: RegistrationStatus.PENDING,
         photoPath: "",
