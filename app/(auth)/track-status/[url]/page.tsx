@@ -4,7 +4,7 @@ import prisma from "@/lib/prisma";
 import { CheckIcon, HourglassIcon, ShieldX, XIcon } from "lucide-react";
 import Link from "next/link";
 import { cookies } from "next/headers";
-import EmailVerifyForm from "@/bak/email-verify-form";
+import EmailVerifyForm from "@/components/common/email-verify-form";
 import VisitSection from "@/components/sections/visit-section";
 import AuthLayout from "@/components/layouts/auth/auth-layout";
 
