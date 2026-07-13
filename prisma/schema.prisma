@@ -25,7 +25,7 @@ model Registration {
   Visit           Visit[]
   documents       documents[]
 
-  @@unique([fullName, email, phone, type])
+  @@unique([email, type])
 }
 
 model Visit {
