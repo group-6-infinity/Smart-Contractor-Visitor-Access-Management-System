@@ -1,0 +1,126 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Registration {
+  id              String             @id @default(cuid())
+  trackingToken   String             @unique
+  createdById     String?
+  type            RegistrationType
+  fullName        String
+  company         String
+  email           String
+  phone           String?
+  photoPath       String?
+  status          RegistrationStatus @default(PENDING)
+  rejectionReason String?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime?          @updatedAt
+  users           users?             @relation(fields: [createdById], references: [id])
+  Visit           Visit[]
+  documents       documents[]
+
+  @@unique([email, type])
+}
+
+model Visit {
+  id              String       @id @default(cuid())
+  registrationId  String
+  purpose         String
+  visitDate       DateTime
+  windowStart     DateTime
+  windowEnd       DateTime
+  authorizedZones String[]
+  status          VisitStatus  @default(PENDING)
+  notes           String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  Registration    Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+}
+
+model documents {
+  id             String       @id @default(cuid())
+  registrationId String
+  type           DocumentType
+  filePath       String
+  expiryDate     DateTime?
+  isVerified     Boolean      @default(false)
+  verifiedById   String?
+  verifiedAt     DateTime?
+  replacedAt     DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  Registration   Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  users          users?       @relation(fields: [verifiedById], references: [id])
+}
+
+model users {
+  id           String         @id @default(cuid())
+  name         String?
+  email        String         @unique
+  passwordHash String
+  role         Role
+  isActive     Boolean        @default(true)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  Registration Registration[]
+  documents    documents[]
+
+  @@unique([name, email])
+}
+
+model Blacklist {
+  id             String   @id @default(cuid())
+  registrationId String?
+  fullName       String
+  email          String
+  reason         String
+  blacklistedBy  String
+  createdAt      DateTime @default(now())
+
+  @@index([email])
+}
+
+enum ConsentStatus {
+  ACTIVE
+  REVOKED
+}
+
+enum DocumentType {
+  KTP
+  BPJS
+  SIO
+  SIA
+  FACE_PHOTO
+}
+
+enum RegistrationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum RegistrationType {
+  CONTRACTOR
+  VISITOR
+}
+
+enum Role {
+  SECURITY_OPERATOR
+  HSE_ADMIN
+  HR_ADMIN
+}
+
+enum VisitStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
