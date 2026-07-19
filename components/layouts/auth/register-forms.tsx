@@ -39,11 +39,12 @@ function RegisterForm({ registerType }: { registerType: RegistrationType }) {
       company: "",
       email: "",
       phone: "",
-      biometricConsent: false
+      biometricConsent: false,
     },
   });
-  const { formState: { isSubmitting } } = form
-
+  const {
+    formState: { isSubmitting },
+  } = form;
 
   async function handleContinue() {
     const isValid = await form.trigger([
@@ -105,7 +106,6 @@ function RegisterForm({ registerType }: { registerType: RegistrationType }) {
         setSubmitError(err.message ?? "Registration failed, please try again");
         return;
       }
-
       router.push(`/register/complete`);
     } catch {
       setSubmitError("Something went wrong, please try again");
@@ -150,7 +150,7 @@ function RegisterForm({ registerType }: { registerType: RegistrationType }) {
             onBack={() => setActiveTab("basic-info")}
             onSubmit={form.handleSubmit(handleSubmit)}
             isSubmitting={isSubmitting}
-             control={form.control}
+            control={form.control}
           />
         </div>
       </Tabs>
