@@ -34,9 +34,44 @@ export default function VisitRequestForm({
 
   const isValid = visitDate && purpose && windowStart && windowEnd;
 
+  // tanggal minimal = besok, maksimal = 1 bulan dari hari ini
+  const today = new Date();
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const minDate = tomorrow.toISOString().slice(0, 10);
+
+  const maxDateObj = new Date(today);
+  maxDateObj.setMonth(maxDateObj.getMonth() + 1);
+  const maxDate = maxDateObj.toISOString().slice(0, 10);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+
+    // validasi tanggal: besok s/d 1 bulan
+    const selected = new Date(visitDate);
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    const min = new Date(now);
+    min.setDate(min.getDate() + 1);
+    const max = new Date(now);
+    max.setMonth(max.getMonth() + 1);
+
+    if (selected < min) {
+      setError("Visit date must be at least tomorrow.");
+      return;
+    }
+    if (selected > max) {
+      setError("Visit date cannot be more than 1 month from today.");
+      return;
+    }
+
+    // validasi window: end harus setelah start
+    if (windowEnd <= windowStart) {
+      setError("Window end must be after window start.");
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -72,7 +107,7 @@ export default function VisitRequestForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid sm:grid-cols-2 gap-6">
         <Field>
           <FieldLabel htmlFor="visitDate" className="text-muted-foreground">
             Visit Date <span className="text-destructive">*</span>
@@ -81,6 +116,8 @@ export default function VisitRequestForm({
             id="visitDate"
             type="date"
             value={visitDate}
+            min={minDate}
+            max={maxDate}
             onChange={(e) => {
               setVisitDate(e.target.value);
               setError(null);
