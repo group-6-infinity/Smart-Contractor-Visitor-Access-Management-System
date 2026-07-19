@@ -24,6 +24,7 @@ model Registration {
   users           users?             @relation(fields: [createdById], references: [id])
   Visit           Visit[]
   documents       documents[]
+  CheckEvent      CheckEvent[]
 
   @@unique([email, type])
 }
@@ -41,6 +42,8 @@ model Visit {
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
   Registration    Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+
+  CheckEvent CheckEvent[]
 }
 
 model documents {
@@ -50,6 +53,7 @@ model documents {
   filePath       String
   expiryDate     DateTime?
   isVerified     Boolean      @default(false)
+  isActive       Boolean      @default(true)
   verifiedById   String?
   verifiedAt     DateTime?
   replacedAt     DateTime?
@@ -84,6 +88,89 @@ model Blacklist {
   createdAt      DateTime @default(now())
 
   @@index([email])
+}
+
+model CheckEvent {
+  id             String      @id @default(cuid())
+  visitId        String
+  registrationId String
+  checkInAt      DateTime    @default(now())
+  checkInBy      String
+  checkOutAt     DateTime?
+  checkOutBy     String?
+  zones          String[]
+  status         CheckStatus @default(INSIDE)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  riskLevel      RiskLevel?
+  isOverride     Boolean     @default(false)
+  overrideJustification String?
+  overrideBy            String?
+
+  Visit        Visit        @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  Registration Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([registrationId])
+}
+
+model Notification {
+  id        String              @id @default(cuid())
+  type      NotificationType
+  title     String
+  message   String
+  channel   NotificationChannel @default(IN_APP)
+  createdAt DateTime            @default(now())
+
+  @@index([createdAt])
+}
+
+model NotificationRead {
+  id         String   @id @default(cuid())
+  userId     String   @unique
+  lastReadAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Zone {
+  id          String    @id @default(cuid())
+  name        String
+  description String?
+  riskLevel   RiskLevel @default(LOW)
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+enum CheckStatus {
+  INSIDE
+  CHECKED_OUT
+  OVERSTAY
+  DENIED
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum NotificationType {
+  REGISTRATION_APPROVED
+  REGISTRATION_REJECTED
+  BLACKLIST_ALERT
+  TELEGRAM_MESSAGE
+  DOCUMENT_EXPIRY
+  OVERSTAY_ALERT
+  VISIT_REQUEST
+}
+
+enum NotificationChannel {
+  IN_APP
+  TELEGRAM
+  EMAIL
 }
 
 enum ConsentStatus {
