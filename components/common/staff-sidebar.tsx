@@ -9,13 +9,21 @@ import {
   ShieldBan,
   LogOut,
   ShieldCheck,
+  LayoutDashboard,
+  Bell,
+  FileCheck,
+  Users,
 } from "lucide-react";
 import { Button } from "../ui/button";
 
 const NAV_ITEMS = [
+  { label: "Dashboard", href: "/staff/overview", icon: LayoutDashboard },
   { label: "Registrations", href: "/staff/registrations", icon: ClipboardList },
   { label: "Visit Approvals", href: "/staff/visits", icon: CalendarCheck },
+  { label: "Document Expiry", href: "/staff/document-expiry", icon: FileCheck },
+  { label: "Who's Inside", href: "/staff/whos-inside", icon: Users },
   { label: "Blacklist", href: "/staff/blacklist", icon: ShieldBan },
+  { label: "Notification", href: "/staff/notifications", icon: Bell },
 ];
 
 export default function StaffSidebar({
@@ -31,6 +39,7 @@ export default function StaffSidebar({
   async function handleLogout() {
     await fetch("/api/staff/logout", { method: "POST" });
     router.push("/internal/staff/login");
+    router.refresh();
   }
 
   return (
@@ -71,9 +80,10 @@ export default function StaffSidebar({
       <div className="border-border border-t p-3">
         <div className="staff__info flex items-center gap-2">
           <Button
-          variant="ghost"
-          className="bg-transparent hover:bg-transparent! block px-2! aspect-square rounded-full border border-border uppercase">
-            { staffName.slice(0,2) }
+            variant="ghost"
+            className="border-border block aspect-square rounded-full border bg-transparent px-2! uppercase hover:bg-transparent!"
+          >
+            {staffName.slice(0, 2)}
           </Button>
           <div className="mb-2 px-3">
             <p className="truncate text-sm font-medium">{staffName}</p>
