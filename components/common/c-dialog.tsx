@@ -16,7 +16,7 @@ interface CustomDialogProps {
   children?: React.ReactNode;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
-  dialogContentWidth?: string
+  className?: string;
 }
 
 export default function CustomDialog({
@@ -26,12 +26,12 @@ export default function CustomDialog({
   children,
   open,
   onOpenChange,
-  dialogContentWidth = 'max-w-2xl',
+  className = "max-w-2xl",
 }: CustomDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
-      <DialogContent className={`${dialogContentWidth}!`}>
+      <DialogContent className={className}>
         {(title || description) && (
           <DialogHeader>
             {title && <DialogTitle>{title}</DialogTitle>}
