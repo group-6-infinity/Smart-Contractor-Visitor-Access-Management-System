@@ -91,19 +91,19 @@ model Blacklist {
 }
 
 model CheckEvent {
-  id             String      @id @default(cuid())
-  visitId        String
-  registrationId String
-  checkInAt      DateTime    @default(now())
-  checkInBy      String
-  checkOutAt     DateTime?
-  checkOutBy     String?
-  zones          String[]
-  status         CheckStatus @default(INSIDE)
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
-  riskLevel      RiskLevel?
-  isOverride     Boolean     @default(false)
+  id                    String      @id @default(cuid())
+  visitId               String
+  registrationId        String
+  checkInAt             DateTime    @default(now())
+  checkInBy             String
+  checkOutAt            DateTime?
+  checkOutBy            String?
+  zones                 String[]
+  status                CheckStatus @default(INSIDE)
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+  riskLevel             RiskLevel?
+  isOverride            Boolean     @default(false)
   overrideJustification String?
   overrideBy            String?
 
@@ -141,6 +141,12 @@ model Zone {
   isActive    Boolean   @default(true)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+}
+
+model EvacuationSnapshot {
+  id        String   @id @default("singleton")
+  data      Json
+  updatedAt DateTime @updatedAt
 }
 
 enum CheckStatus {
