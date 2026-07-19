@@ -100,7 +100,6 @@ export async function POST(req: NextRequest) {
 
     const normalizedEmail = email.toLowerCase();
 
-    // === CEK EXISTING sesuai constraint DB (email + type) ===
     const existing = await prisma.registration.findFirst({
       where: {
         email: normalizedEmail,
@@ -111,10 +110,8 @@ export async function POST(req: NextRequest) {
 
     if (existing) {
       if (existing.status === "REJECTED") {
-        // yang lama ditolak → boleh daftar ulang. Hapus lama (cascade hapus dokumen/visit/checkevent)
         await prisma.registration.delete({ where: { id: existing.id } });
       } else {
-        // PENDING / APPROVED → tolak, arahkan ke tracking lama
         const statusText =
           existing.status === "PENDING"
             ? "sedang dalam proses review"
@@ -129,7 +126,6 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // === Validasi file ===
     const fileErrors: Record<string, string> = {};
     const validatedFiles: Record<string, File> = {};
 
@@ -171,7 +167,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // === Create registration ===
     const trackingToken = await generateUniqueToken();
 
     let registration;
@@ -189,7 +184,6 @@ export async function POST(req: NextRequest) {
         },
       });
     } catch (createErr) {
-      // jaring pengaman kalau race condition lolos cek existing
       if (
         createErr &&
         typeof createErr === "object" &&
