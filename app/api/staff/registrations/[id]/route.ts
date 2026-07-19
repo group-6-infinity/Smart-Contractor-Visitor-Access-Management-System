@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { sendTelegramMessage } from "@/lib/telegram";
 import { sendRegistrationEmail } from "@/lib/mailer";
+import { createNotification } from "@/lib/notifications";
 
 async function getStaffSession() {
   const cookieStore = await cookies();
@@ -129,6 +130,23 @@ export async function PATCH(
   } catch (emailErr) {
     console.error("[EMAIL] notify failed:", emailErr);
   }
+
+  try {
+    await createNotification({
+      type:
+        action === "APPROVE"
+          ? "REGISTRATION_APPROVED"
+          : "REGISTRATION_REJECTED",
+      title: `Registration ${action === "APPROVE" ? "approved" : "rejected"}`,
+      message: `${updated.fullName} registration has been ${
+        action === "APPROVE" ? "approved" : "rejected"
+      } by ${session.email}`,
+    });
+  } catch (notifErr) {
+    console.error("[NOTIFICATION] create failed:", notifErr);
+  }
+
+  return NextResponse.json({ registration: updated });
 
   return NextResponse.json({ registration: updated });
 }
