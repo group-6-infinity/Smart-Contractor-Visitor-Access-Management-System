@@ -1,14 +1,14 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { ChevronRight } from "lucide-react";
+import { ArrowLeft, ChevronRight } from "lucide-react";
 import Image from "next/image";
 import { RegistrationItem } from "@/const/interfaces/reg-prop.inteface";
 import { statusConfig, typeConfig } from "@/const/data/status-config-item";
 import Link from "next/link";
+import { cn } from "@/lib/utils";
 
 export default function TrackStatusPage() {
   const [email, setEmail] = useState("");
@@ -47,6 +47,16 @@ export default function TrackStatusPage() {
     <main className="flex min-h-screen flex-col items-center justify-center">
       <section className="grid w-full md:grid-cols-[2fr_1fr]">
         <div className="mx-auto flex w-full max-w-2xl flex-col items-center justify-center gap-10 p-4">
+          <Link
+            className={cn(
+              buttonVariants({ variant: "ghost" }),
+              "mx-auto flex items-center gap-2",
+            )}
+            href="/"
+          >
+            <ArrowLeft />
+            Back to home
+          </Link>
           <div className="space-y-1 text-center">
             <h1 className="text-2xl font-semibold">Track Registration</h1>
             <p className="text-muted-foreground text-sm">
@@ -57,7 +67,7 @@ export default function TrackStatusPage() {
           </div>
 
           {!registrations && (
-            <div className="max-w-sm w-full space-y-3">
+            <div className="w-full max-w-sm space-y-3">
               <Input
                 type="email"
                 placeholder="name@example.com"
@@ -80,7 +90,7 @@ export default function TrackStatusPage() {
           )}
 
           {registrations && (
-            <div className="grid w-full grid-cols-2 gap-8">
+            <div className="grid w-full gap-8 sm:grid-cols-2">
               {registrations.map((reg) => {
                 const type = typeConfig[reg.type];
                 const status = statusConfig[reg.status];
