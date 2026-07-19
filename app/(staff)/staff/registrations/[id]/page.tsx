@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ArrowLeft, HardHat, User } from "lucide-react";
 import RegistrationReviewActions from "@/components/common/registration-review-actions";
 import DocumentVerifyRow from "@/components/common/document-verify-row";
+import BlacklistAction from "@/components/layouts/dashboards/blacklist-action";
 
 const STATUS_STYLE: Record<string, string> = {
   PENDING: "border-info-border text-info bg-info-muted",
@@ -33,6 +34,10 @@ export default async function RegistrationDetailPage({
   });
 
   if (!registration) notFound();
+  const blacklistEntry = await prisma.blacklist.findFirst({
+    where: { email: registration.email },
+    select: { id: true, reason: true },
+  });
 
   return (
     <div className="mx-auto max-w-3xl p-8">
@@ -89,6 +94,7 @@ export default async function RegistrationDetailPage({
           registration.documents.map((doc) => (
             <DocumentVerifyRow
               key={doc.id}
+              registrationStatus={registration.status}
               doc={{
                 id: doc.id,
                 type: doc.type,
@@ -102,6 +108,16 @@ export default async function RegistrationDetailPage({
         )}
       </div>
 
+      <div className="mb-6">
+        <BlacklistAction
+          registrationId={registration.id}
+          fullName={registration.fullName}
+          isBlacklisted={!!blacklistEntry}
+          blacklistId={blacklistEntry?.id}
+          blacklistReason={blacklistEntry?.reason}
+        />
+      </div>
+
       {registration.status === "REJECTED" && registration.rejectionReason && (
         <div className="border-destructive-border bg-destructive-muted text-destructive mb-6 rounded-lg border p-4 text-sm">
           <p className="mb-1 font-semibold">Rejection reason</p>
@@ -110,7 +126,14 @@ export default async function RegistrationDetailPage({
       )}
 
       {registration.status === "PENDING" && (
-        <RegistrationReviewActions registrationId={registration.id} />
+        <RegistrationReviewActions
+          registrationId={registration.id}
+          documents={registration.documents.map((d) => ({
+            id: d.id,
+            type: d.type,
+            expiryDate: d.expiryDate ? d.expiryDate.toISOString() : null,
+          }))}
+        />
       )}
     </div>
   );
