@@ -98,6 +98,34 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const normalizedEmail = email.toLowerCase();
+
+    const existing = await prisma.registration.findFirst({
+      where: {
+        email: normalizedEmail,
+        type: type as RegistrationType,
+      },
+      select: { id: true, status: true, trackingToken: true },
+    });
+
+    if (existing) {
+      if (existing.status === "REJECTED") {
+        await prisma.registration.delete({ where: { id: existing.id } });
+      } else {
+        const statusText =
+          existing.status === "PENDING"
+            ? "sedang dalam proses review"
+            : "sudah disetujui";
+        return NextResponse.json(
+          {
+            message: `Email ini sudah terdaftar sebagai ${type} dan ${statusText}. Silakan gunakan link tracking dari email registrasi sebelumnya.`,
+            existingToken: existing.trackingToken,
+          },
+          { status: 409 },
+        );
+      }
+    }
+
     const fileErrors: Record<string, string> = {};
     const validatedFiles: Record<string, File> = {};
 
@@ -139,39 +167,38 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const existing = await prisma.registration.findFirst({
-      where: {
-        fullName,
-        email: email.toLowerCase(),
-        phone,
-        type: type as RegistrationType,
-      },
-      select: { id: true },
-    });
-
-    if (existing) {
-      return NextResponse.json(
-        {
-          message:
-            "You have already registered with these details for this role",
-        },
-        { status: 409 },
-      );
-    }
-
     const trackingToken = await generateUniqueToken();
-    const registration = await prisma.registration.create({
-      data: {
-        trackingToken,
-        type: type as RegistrationType,
-        fullName,
-        company,
-        email: email.toLowerCase(),
-        phone,
-        status: RegistrationStatus.PENDING,
-        photoPath: "",
-      },
-    });
+
+    let registration;
+    try {
+      registration = await prisma.registration.create({
+        data: {
+          trackingToken,
+          type: type as RegistrationType,
+          fullName,
+          company,
+          email: normalizedEmail,
+          phone,
+          status: RegistrationStatus.PENDING,
+          photoPath: "",
+        },
+      });
+    } catch (createErr) {
+      if (
+        createErr &&
+        typeof createErr === "object" &&
+        "code" in createErr &&
+        createErr.code === "P2002"
+      ) {
+        return NextResponse.json(
+          {
+            message: `Email ini sudah terdaftar sebagai ${type}. Gunakan link tracking sebelumnya atau email lain.`,
+          },
+          { status: 409 },
+        );
+      }
+      throw createErr;
+    }
 
     let uploadedBlobs: Record<string, string> = {};
 
@@ -243,7 +270,7 @@ export async function POST(req: NextRequest) {
 
     try {
       await sendRegistrationEmail({
-        to: email,
+        to: normalizedEmail,
         fullName,
         type,
         status: "PENDING",
