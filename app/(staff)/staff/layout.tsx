@@ -1,4 +1,5 @@
 import StaffSidebar from "@/components/common/staff-sidebar";
+import NotificationBell from "@/components/layouts/dashboards/notification-bell";
 import { jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -10,7 +11,6 @@ export default async function StaffLayout({
 }) {
   const cookieStore = await cookies();
   const token = cookieStore.get("staff_token")?.value;
-
   let session: { name?: string; email: string; role: string } | null = null;
 
   if (token) {
@@ -24,6 +24,7 @@ export default async function StaffLayout({
   }
 
   if (!session) redirect("/internal/staff/login");
+  if (session.role === "SECURITY_OPERATOR") return <>{children}</>;
 
   return (
     <div className="flex">
@@ -31,7 +32,12 @@ export default async function StaffLayout({
         staffName={session.name ?? session.email}
         staffRole={session.role}
       />
-      <main className="h-svh flex-1 overflow-y-auto">{children}</main>
+      <main className="h-svh flex-1 overflow-y-auto">
+        <div className="border-border flex items-center justify-end border-b px-6 py-[.88rem]">
+          <NotificationBell />
+        </div>
+        {children}
+      </main>
     </div>
   );
 }

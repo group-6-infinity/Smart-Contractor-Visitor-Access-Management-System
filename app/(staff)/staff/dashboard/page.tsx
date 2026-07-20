@@ -5,8 +5,8 @@ import { Role } from "@/lib/generated/prisma/enums";
 
 const ROLE_REDIRECT: Record<Role, string> = {
   SECURITY_OPERATOR: "/staff/security/checkin",
-  HSE_ADMIN: "/staff/registrations",
-  HR_ADMIN: "/staff/registrations",
+  HSE_ADMIN: "/staff/overview",
+  HR_ADMIN: "/staff/overview",
 };
 const STAFF_LOGIN_URL = "/internal/staff/login";
 

@@ -1,56 +1,82 @@
-import prisma from "@/lib/prisma"
-import { cookies } from "next/headers"
-import { NextRequest, NextResponse } from "next/server"
+import prisma from "@/lib/prisma";
+import { cookies } from "next/headers";
+import { NextRequest, NextResponse } from "next/server";
+import { createNotification } from "@/lib/notifications";
+import { sendTelegramMessage } from "@/lib/telegram";
+import { NotificationType } from "@/lib/generated/prisma/enums";
 
 export async function POST(req: NextRequest) {
   try {
-    const { token, visitDate, purpose, windowStart, windowEnd } = await req.json()
+    const { token, visitDate, purpose, windowStart, windowEnd } =
+      await req.json();
 
     if (!token || !visitDate || !purpose || !windowStart || !windowEnd) {
       return NextResponse.json(
         { message: "All fields are required" },
-        { status: 400 }
-      )
+        { status: 400 },
+      );
     }
 
     const registration = await prisma.registration.findFirst({
       where: { trackingToken: token },
-      select: { id: true, email: true, status: true },
-    })
+      select: {
+        id: true,
+        email: true,
+        status: true,
+        fullName: true,
+        company: true,
+      },
+    });
 
     if (!registration) {
       return NextResponse.json(
         { message: "Registration not found" },
-        { status: 404 }
-      )
+        { status: 404 },
+      );
     }
 
-    // pastikan sudah verified via cookie
-    const cookieStore = await cookies()
-    const sessionEmail = cookieStore.get(`track_session_${token}`)?.value
+    const cookieStore = await cookies();
+    const sessionEmail = cookieStore.get(`track_session_${token}`)?.value;
     if (sessionEmail !== registration.email) {
-      return NextResponse.json(
-        { message: "Unauthorized" },
-        { status: 401 }
-      )
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
-    // hanya registrasi APPROVED yang boleh submit visit
     if (registration.status !== "APPROVED") {
       return NextResponse.json(
         { message: "Registration must be approved before requesting a visit" },
-        { status: 403 }
-      )
+        { status: 403 },
+      );
     }
 
-    const start = new Date(windowStart)
-    const end = new Date(windowEnd)
+    // === validasi tanggal visit: besok s/d 1 bulan ===
+    const visitDateObj = new Date(visitDate);
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    const minDate = new Date(now);
+    minDate.setDate(minDate.getDate() + 1);
+    const maxDate = new Date(now);
+    maxDate.setMonth(maxDate.getMonth() + 1);
 
+    if (visitDateObj < minDate) {
+      return NextResponse.json(
+        { message: "Visit date must be at least tomorrow" },
+        { status: 400 },
+      );
+    }
+    if (visitDateObj > maxDate) {
+      return NextResponse.json(
+        { message: "Visit date cannot be more than 1 month from today" },
+        { status: 400 },
+      );
+    }
+
+    const start = new Date(windowStart);
+    const end = new Date(windowEnd);
     if (end <= start) {
       return NextResponse.json(
         { message: "Window end must be after window start" },
-        { status: 400 }
-      )
+        { status: 400 },
+      );
     }
 
     const visit = await prisma.visit.create({
@@ -60,20 +86,51 @@ export async function POST(req: NextRequest) {
         visitDate: new Date(visitDate),
         windowStart: start,
         windowEnd: end,
-        authorizedZones: [], // diisi HSE saat approve
+        authorizedZones: [],
         status: "PENDING",
       },
-    })
+    });
+
+    // === NOTIF ke HSE/HR — in-app + Telegram (best effort, ga ganggu response) ===
+    const visitDateStr = new Date(visitDate).toLocaleDateString("id-ID", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    });
+
+    try {
+      await createNotification({
+        type: NotificationType.VISIT_REQUEST,
+        title: "New visit request",
+        message: `${registration.fullName} (${registration.company}) requested a visit on ${visitDateStr}. "${purpose}". Awaiting review.`,
+      });
+    } catch {
+      console.error("[NOTIFICATION] visit request notify failed");
+    }
+
+    try {
+      await sendTelegramMessage(
+        "HSE",
+        `🗓️ *New Visit Request*\n\n` +
+          `Name: ${registration.fullName}\n` +
+          `Company: ${registration.company}\n` +
+          `Date: ${visitDateStr}\n` +
+          `Purpose: ${purpose}\n\n` +
+          `Please review in the dashboard.`,
+      );
+    } catch {
+      console.error("[TELEGRAM] visit request notify failed");
+    }
 
     return NextResponse.json(
       { message: "Visit request submitted", data: visit },
-      { status: 201 }
-    )
+      { status: 201 },
+    );
   } catch (err) {
-    console.error("[VISIT REQUEST ERROR]", err)
+    console.error("[VISIT REQUEST ERROR]", err);
     return NextResponse.json(
       { message: err instanceof Error ? err.message : "Internal server error" },
-      { status: 500 }
-    )
+      { status: 500 },
+    );
   }
 }
