@@ -49,8 +49,8 @@ Open [http://localhost:3000](http://localhost:3000)
 | Name | Role |
 |------|------|
 | Wilbert Leonard Harriman | Project Manager & QA |
-| Shafa Nabilah Rizqullah Famahira | Business Analyst & Developer |
-| Nailha Sakhila Dewi | Developer & Designer |
+| Shafa Nabilah Rizqullah Famahira | Business Analyst |
+| Nailha Sakhila Dewi | Lead Developer & Designer |
 | Tessalonika Angeline Purba | Developer & Designer |
  
 ---
