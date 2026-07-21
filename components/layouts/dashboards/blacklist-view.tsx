@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ShieldBan, Info } from "lucide-react";
+import { formatDateWIB } from "@/lib/datetime";
 
 interface BlacklistRow {
   id: string;
@@ -9,14 +10,6 @@ interface BlacklistRow {
   company: string | null;
   reason: string;
   createdAt: string;
-}
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
 }
 
 export default function BlacklistView() {
@@ -88,7 +81,7 @@ export default function BlacklistView() {
                 {e.reason}
               </span>
               <span className="text-muted-foreground text-xs">
-                {formatDate(e.createdAt)}
+                {formatDateWIB(e.createdAt)}
               </span>
             </div>
           ))}
