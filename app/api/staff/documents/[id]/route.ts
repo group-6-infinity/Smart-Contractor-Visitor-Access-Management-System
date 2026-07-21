@@ -16,8 +16,6 @@ async function getStaffSession() {
   }
 }
 
-const NO_EXPIRY_TYPES = ["KTP", "FACE_PHOTO"];
-
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -30,25 +28,7 @@ export async function PATCH(
   const { id } = await params;
   const { isVerified, expiryDate } = await req.json();
 
-  const document = await prisma.documents.findUnique({
-    where: { id },
-    select: {
-      id: true,
-      type: true,
-      Registration: { select: { status: true } },
-    },
-  });
-
-  if (!document) {
-    return NextResponse.json(
-      { message: "Document not found" },
-      { status: 404 },
-    );
-  }
-
-  const noExpiry = NO_EXPIRY_TYPES.includes(document.type.toUpperCase());
-
-  if (isVerified && !noExpiry) {
+  if (isVerified) {
     if (!expiryDate) {
       return NextResponse.json(
         { message: "Expiry date is required to verify a document" },
@@ -67,6 +47,21 @@ export async function PATCH(
     }
   }
 
+  const document = await prisma.documents.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      Registration: { select: { status: true } },
+    },
+  });
+
+  if (!document) {
+    return NextResponse.json(
+      { message: "Document not found" },
+      { status: 404 },
+    );
+  }
+
   if (document.Registration.status !== "PENDING") {
     return NextResponse.json(
       { message: "Cannot modify documents of a reviewed registration" },
@@ -78,12 +73,7 @@ export async function PATCH(
     where: { id },
     data: {
       isVerified: isVerified ?? undefined,
-      expiryDate:
-        isVerified && noExpiry
-          ? null
-          : expiryDate
-            ? new Date(expiryDate)
-            : undefined,
+      expiryDate: expiryDate ? new Date(expiryDate) : undefined,
       verifiedById: isVerified ? session.id : undefined,
       verifiedAt: isVerified ? new Date() : undefined,
     },
