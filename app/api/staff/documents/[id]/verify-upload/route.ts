@@ -5,8 +5,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { createNotification } from "@/lib/notifications";
 import { NotificationType } from "@/lib/generated/prisma/enums";
 
-const NO_EXPIRY_TYPES = ["KTP", "FACE_PHOTO"];
-
 async function getStaffSession() {
   const cookieStore = await cookies();
   const token = cookieStore.get("staff_token")?.value;
@@ -30,7 +28,7 @@ export async function PATCH(
   }
 
   const { id } = await params;
-  const { expiryDate, noExpiry, isVerified = true } = await req.json();
+  const { expiryDate, isVerified = true } = await req.json();
 
   const doc = await prisma.documents.findUnique({
     where: { id },
@@ -75,34 +73,18 @@ export async function PATCH(
   // ============================================================
   // VERIFY (isVerified: true)
   // ============================================================
-  let expiry: Date | null = null;
-
-  if (noExpiry) {
-    expiry = null;
-  } else {
-    if (!expiryDate) {
-      return NextResponse.json(
-        { message: "Expiry date is required" },
-        { status: 400 },
-      );
-    }
-    expiry = new Date(expiryDate);
-    const startOfToday = new Date();
-    startOfToday.setHours(0, 0, 0, 0);
-    if (expiry <= startOfToday) {
-      return NextResponse.json(
-        { message: "Expiry date must be a future date" },
-        { status: 400 },
-      );
-    }
-  }
-
-  if (noExpiry && !NO_EXPIRY_TYPES.includes(doc.type.toUpperCase())) {
+  if (!expiryDate) {
     return NextResponse.json(
-      {
-        message:
-          "Only KTP and Face Photo can be verified without an expiry date",
-      },
+      { message: "Expiry date is required" },
+      { status: 400 },
+    );
+  }
+  const expiry = new Date(expiryDate);
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  if (expiry <= startOfToday) {
+    return NextResponse.json(
+      { message: "Expiry date must be a future date" },
       { status: 400 },
     );
   }

@@ -5,11 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import CustomDialog from "@/components/common/c-dialog";
 import { CheckCircle2 } from "lucide-react";
-const NO_EXPIRY_TYPES = ["KTP", "FACE_PHOTO"];
-
-export function isNoExpiryType(type: string): boolean {
-  return NO_EXPIRY_TYPES.includes(type.toUpperCase());
-}
 
 export default function DocumentVerifyAction({
   docId,
@@ -28,10 +23,8 @@ export default function DocumentVerifyAction({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const noExpiry = isNoExpiryType(docType);
   const today = new Date().toISOString().slice(0, 10);
-  // valid kalau: no-expiry (ga butuh tanggal) ATAU tanggal masa depan
-  const isValid = noExpiry || (expiry !== "" && expiry > today);
+  const isValid = expiry !== "" && expiry > today;
 
   async function handleVerify() {
     setError(null);
@@ -45,9 +38,7 @@ export default function DocumentVerifyAction({
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          // KTP → null (no expiry). Lainnya → tanggal.
-          expiryDate: noExpiry ? null : expiry,
-          noExpiry,
+          expiryDate: expiry,
         }),
       });
       const data = await res.json();
@@ -77,40 +68,26 @@ export default function DocumentVerifyAction({
       }
     >
       <div className="space-y-4">
-        {noExpiry ? (
-          // KTP — no expiry, cukup konfirmasi
-          <div className="border-info-border bg-info-muted text-info rounded-lg border p-3 text-sm">
-            <p className="font-semibold">{docType} has no expiry date</p>
-            <p className="mt-1">
-              This document type is valid for a lifetime. Verifying will mark it
-              as valid with no expiry.
-            </p>
-          </div>
-        ) : (
-          // Dokumen lain — wajib set expiry
-          <>
-            <p className="text-muted-foreground text-sm">
-              Set the expiry date for this document. Once verified, the person
-              can submit visit requests.
-            </p>
-            <div className="space-y-1">
-              <label className="text-muted-foreground text-sm">
-                Expiry date <span className="text-destructive">*</span>
-              </label>
-              <Input
-                type="date"
-                value={expiry}
-                min={today}
-                onChange={(e) => {
-                  setExpiry(e.target.value);
-                  setError(null);
-                }}
-                disabled={loading}
-                className="border-border rounded-md border [&::-webkit-calendar-picker-indicator]:invert"
-              />
-            </div>
-          </>
-        )}
+        <p className="text-muted-foreground text-sm">
+          Set the expiry date for this document. Once verified, the person
+          can submit visit requests.
+        </p>
+        <div className="space-y-1">
+          <label className="text-muted-foreground text-sm">
+            Expiry date <span className="text-destructive">*</span>
+          </label>
+          <Input
+            type="date"
+            value={expiry}
+            min={today}
+            onChange={(e) => {
+              setExpiry(e.target.value);
+              setError(null);
+            }}
+            disabled={loading}
+            className="border-border rounded-md border [&::-webkit-calendar-picker-indicator]:invert"
+          />
+        </div>
 
         {error && <p className="text-destructive text-sm">{error}</p>}
 
@@ -128,11 +105,7 @@ export default function DocumentVerifyAction({
             disabled={loading || !isValid}
             className="cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {loading
-              ? "Verifying..."
-              : noExpiry
-                ? "Verify (No Expiry)"
-                : "Verify & Set Expiry"}
+            {loading ? "Verifying..." : "Verify & Set Expiry"}
           </Button>
         </div>
       </div>
