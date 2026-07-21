@@ -98,6 +98,7 @@ export async function sendVisitStatusEmail({
   purpose,
   visitDate,
   trackingToken,
+  visitToken,
   reason,
 }: {
   to: string;
@@ -106,6 +107,7 @@ export async function sendVisitStatusEmail({
   purpose: string;
   visitDate: Date;
   trackingToken: string;
+  visitToken?: string;
   reason?: string;
 }) {
   const trackingUrl = `${process.env.NEXT_PUBLIC_APP_URL}/track-status/${trackingToken}`;
@@ -118,8 +120,8 @@ export async function sendVisitStatusEmail({
   const approved = status === "APPROVED";
 
   if (approved) {
-    // generate QR (value = trackingToken, sama kaya gate pass web) jadi PNG buffer
-    const qrBuffer = await QRCode.toBuffer(trackingToken, {
+    // QR value HARUS visitToken (per-visit), sama kaya gate pass web — bukan trackingToken registrasi
+    const qrBuffer = await QRCode.toBuffer(visitToken ?? trackingToken, {
       type: "png",
       width: 300,
       margin: 2,
@@ -135,7 +137,7 @@ export async function sendVisitStatusEmail({
         purpose,
         visitDateStr,
         trackingUrl,
-        token: trackingToken,
+        token: visitToken ?? trackingToken,
       }),
       attachments: [
         {
