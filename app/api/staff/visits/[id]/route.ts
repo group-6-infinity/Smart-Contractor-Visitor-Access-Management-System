@@ -95,6 +95,7 @@ export async function PATCH(
       status: true,
       purpose: true,
       visitDate: true,
+      visitToken: true,
       Registration: {
         select: {
           fullName: true,
@@ -120,8 +121,7 @@ export async function PATCH(
     );
   }
 
-  // Guard approve: semua dokumen aktif harus VERIFIED.
-  // KTP (expiryDate null) yang verified = valid. Yang belum verified = block.
+  // Guard approve: semua dokumen aktif harus VERIFIED dan punya expiry yang valid.
   if (action === "APPROVE") {
     const docs = visit.Registration.documents;
     const unverified = docs.filter((d) => !d.isVerified);
@@ -135,12 +135,9 @@ export async function PATCH(
         { status: 400 },
       );
     }
-    // dokumen non-KTP yang verified tapi expiry-nya null / lewat → block juga
+    // dokumen verified tapi expiry-nya null / lewat → block juga
     const invalidExpiry = docs.filter(
-      (d) =>
-        d.isVerified &&
-        !["KTP", "FACE_PHOTO"].includes(d.type.toUpperCase()) &&
-        (!d.expiryDate || new Date(d.expiryDate) < new Date()),
+      (d) => d.isVerified && (!d.expiryDate || new Date(d.expiryDate) < new Date()),
     );
     if (invalidExpiry.length > 0) {
       return NextResponse.json(
@@ -171,6 +168,7 @@ export async function PATCH(
       purpose: visit.purpose,
       visitDate: visit.visitDate,
       trackingToken: visit.Registration.trackingToken,
+      visitToken: visit.visitToken,
     });
   } catch {
     console.error("[EMAIL] visit status notify failed");

@@ -52,8 +52,6 @@ const FILTERS = [
   { value: "expired", label: "Expired" },
 ];
 
-const NO_EXPIRY_TYPES = ["KTP", "FACE_PHOTO"];
-
 function formatReadableDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-GB", {
     day: "numeric",
@@ -280,9 +278,8 @@ function VerifyAction({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const noExpiry = NO_EXPIRY_TYPES.includes(docType.toUpperCase());
   const today = new Date().toISOString().slice(0, 10);
-  const isValid = noExpiry || (expiry !== "" && expiry > today);
+  const isValid = expiry !== "" && expiry > today;
 
   async function handleVerify() {
     setError(null);
@@ -297,8 +294,7 @@ function VerifyAction({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           isVerified: true,
-          expiryDate: noExpiry ? null : expiry,
-          noExpiry,
+          expiryDate: expiry,
         }),
       });
       const data = await res.json();
@@ -328,38 +324,26 @@ function VerifyAction({
       }
     >
       <div className="space-y-4">
-        {noExpiry ? (
-          <div className="border-info-border bg-info-muted text-info rounded-lg border p-3 text-sm">
-            <p className="font-semibold">{docType} has no expiry date</p>
-            <p className="mt-1">
-              This document type is valid for a lifetime. Verifying will mark it
-              as valid with no expiry.
-            </p>
-          </div>
-        ) : (
-          <>
-            <p className="text-muted-foreground text-sm">
-              Set the expiry date for this document. Once verified, the person
-              can submit visit requests.
-            </p>
-            <div className="space-y-1">
-              <label className="text-muted-foreground text-sm">
-                Expiry date <span className="text-destructive">*</span>
-              </label>
-              <Input
-                type="date"
-                value={expiry}
-                min={today}
-                onChange={(e) => {
-                  setExpiry(e.target.value);
-                  setError(null);
-                }}
-                disabled={loading}
-                className="border-border rounded-md border [&::-webkit-calendar-picker-indicator]:invert"
-              />
-            </div>
-          </>
-        )}
+        <p className="text-muted-foreground text-sm">
+          Set the expiry date for this document. Once verified, the person
+          can submit visit requests.
+        </p>
+        <div className="space-y-1">
+          <label className="text-muted-foreground text-sm">
+            Expiry date <span className="text-destructive">*</span>
+          </label>
+          <Input
+            type="date"
+            value={expiry}
+            min={today}
+            onChange={(e) => {
+              setExpiry(e.target.value);
+              setError(null);
+            }}
+            disabled={loading}
+            className="border-border rounded-md border [&::-webkit-calendar-picker-indicator]:invert"
+          />
+        </div>
 
         {error && <p className="text-destructive text-sm">{error}</p>}
 
@@ -377,11 +361,7 @@ function VerifyAction({
             disabled={loading || !isValid}
             className="cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {loading
-              ? "Verifying..."
-              : noExpiry
-                ? "Verify (No Expiry)"
-                : "Verify & Set Expiry"}
+            {loading ? "Verifying..." : "Verify & Set Expiry"}
           </Button>
         </div>
       </div>
