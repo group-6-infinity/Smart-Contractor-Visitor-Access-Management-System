@@ -5,7 +5,7 @@ import Link from "next/link";
 
 export default function Action() {
   return (
-    <div className="mx-auto mt-8 flex w-max flex-wrap items-center justify-center gap-3">
+    <div className="mx-auto mt-8 grid sm:grid-cols-2 sm:w-max flex-wrap items-center justify-center gap-3">
       <Link
         href="/track-status"
         className={cn(
