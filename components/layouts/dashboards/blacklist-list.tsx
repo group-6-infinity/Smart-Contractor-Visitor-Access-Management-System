@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { ShieldX, ShieldCheck, ExternalLink } from "lucide-react";
+import { formatDateWIB } from "@/lib/datetime";
 
 interface BlacklistEntry {
   id: string;
@@ -12,14 +13,6 @@ interface BlacklistEntry {
   reason: string;
   registrationId: string | null;
   createdAt: string;
-}
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("id-ID", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
 }
 
 export default function BlacklistList({
@@ -86,7 +79,7 @@ export default function BlacklistList({
           <span className="text-muted-foreground truncate">{e.email}</span>
           <span className="text-muted-foreground truncate">{e.reason}</span>
           <span className="text-muted-foreground text-xs">
-            {formatDate(e.createdAt)}
+            {formatDateWIB(e.createdAt)}
           </span>
           <Button
             variant="outline"

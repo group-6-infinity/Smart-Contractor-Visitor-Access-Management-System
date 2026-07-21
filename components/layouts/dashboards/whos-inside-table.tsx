@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { HardHat, User, DoorOpen, AlertTriangle, Users } from "lucide-react";
+import { formatTimeWIB } from "@/lib/datetime";
 
 interface InsideRow {
   id: string;
@@ -16,15 +17,7 @@ interface InsideRow {
   isOverstay: boolean;
 }
 
-function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString("id-ID", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
 const POLL_INTERVAL = 30000;
-
 export default function WhosInsideTable({
   initialRows,
 }: {
@@ -142,7 +135,7 @@ export default function WhosInsideTable({
 
             <div className="flex items-center gap-1.5">
               <span className="text-muted-foreground">
-                until {formatTime(r.windowEnd)}
+                until {formatTimeWIB(r.windowEnd)}
               </span>
               {r.isOverstay && (
                 <span className="text-destructive inline-flex items-center gap-1 text-xs font-medium">
@@ -153,7 +146,7 @@ export default function WhosInsideTable({
             </div>
 
             <span className="text-muted-foreground">
-              {formatTime(r.checkInAt)}
+              {formatTimeWIB(r.checkInAt)}
             </span>
 
             <Button

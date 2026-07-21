@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import QrScanner from "./qr-scanner";
+import { formatDateWIB, formatTimeWIB } from "@/lib/datetime";
 
 interface DocStatus {
   id: string;
@@ -68,13 +69,6 @@ const RISK_STYLE: Record<string, string> = {
   MEDIUM: "bg-info-muted text-info",
   HIGH: "bg-destructive-muted text-destructive",
 };
-
-function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString("id-ID", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 function formatReadableDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-GB", {
@@ -500,7 +494,7 @@ function ApprovedView({
         <span
           className={cn(
             "inline-flex items-center gap-1 rounded-full px-3 py-1 text-sm font-medium",
-            RISK_STYLE[risk.level]
+            RISK_STYLE[risk.level],
           )}
         >
           <CheckCircle2 className="h-4 w-4" />
@@ -514,9 +508,16 @@ function ApprovedView({
           <span className="font-semibold">{visit.purpose}</span>
         </div>
         <div className="flex justify-between">
+          <span className="text-muted-foreground">VISIT DATE</span>
+          <span className="font-semibold">
+            {formatDateWIB(visit.visitDate)}
+          </span>
+        </div>
+        <div className="flex justify-between">
           <span className="text-muted-foreground">VISIT WINDOW</span>
           <span className="font-semibold">
-            {formatTime(visit.windowStart)} – {formatTime(visit.windowEnd)}
+            {formatTimeWIB(visit.windowStart)} –{" "}
+            {formatTimeWIB(visit.windowEnd)}
           </span>
         </div>
         <div className="flex items-center justify-between">
@@ -569,7 +570,7 @@ function ApprovedView({
       {risk.requiresManualReview && (
         <div className="border-primary/40 text-muted-foreground rounded-lg border border-dashed p-3 text-sm">
           {risk.isFirstVisit ? "First Visit · " : ""}
-          Manual Review Required — {risk.reasons.join(", ")}
+          Manual Review Required {risk.reasons.join(", ")}
         </div>
       )}
 
