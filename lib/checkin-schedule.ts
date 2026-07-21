@@ -1,19 +1,9 @@
-// lib/checkin-schedule.ts
-// Validasi apakah check-in boleh dilakukan sekarang, sesuai jadwal visit.
-// Aturan (ketat): harus di tanggal visit + dalam window jam (windowStart–windowEnd).
+import { toWIBDateKey } from "./datetime";
 
 export interface ScheduleCheck {
   allowed: boolean;
   reason: string | null;
   code: "OK" | "WRONG_DATE" | "BEFORE_WINDOW" | "AFTER_WINDOW";
-}
-
-// Bandingin tanggal (abaikan jam) pakai WIB
-const WIB_OFFSET_MS = 7 * 60 * 60 * 1000;
-
-function toWIBDateKey(date: Date): string {
-  const wib = new Date(date.getTime() + WIB_OFFSET_MS);
-  return wib.toISOString().slice(0, 10); // YYYY-MM-DD
 }
 
 export function checkSchedule(
@@ -23,23 +13,19 @@ export function checkSchedule(
   now: Date = new Date()
 ): ScheduleCheck {
   const todayKey = toWIBDateKey(now);
-  const visitKey = toWIBDateKey(visitDate);
+  const windowDateKey = toWIBDateKey(windowStart);
 
-  // 1. Harus tanggal yang sama dengan visit
-  if (todayKey !== visitKey) {
-    const nowTime = now.getTime();
-    const visitTime = new Date(visitKey + "T00:00:00").getTime();
+  if (todayKey !== windowDateKey) {
     return {
       allowed: false,
-      code: nowTime < visitTime ? "WRONG_DATE" : "AFTER_WINDOW",
+      code: todayKey < windowDateKey ? "WRONG_DATE" : "AFTER_WINDOW",
       reason:
-        nowTime < visitTime
-          ? `Check-in not allowed yet. This visit is scheduled for a later date.`
-          : `This visit date has passed.`,
+        todayKey < windowDateKey
+          ? "Check-in not allowed yet. This visit is scheduled for a later date."
+          : "This visit date has passed.",
     };
   }
 
-  // 2. Harus dalam window jam
   const nowMs = now.getTime();
   if (nowMs < windowStart.getTime()) {
     return {

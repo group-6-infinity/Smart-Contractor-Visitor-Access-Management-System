@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { ChevronRight, HardHat, User } from "lucide-react";
+import { formatDateWIB, formatTimeWIB } from "@/lib/datetime";
 
 interface VisitRow {
   id: string;
@@ -28,21 +29,6 @@ const STATUS_STYLE: Record<string, string> = {
 
 const TABS = ["ALL", "PENDING", "APPROVED", "REJECTED"] as const;
 type Tab = (typeof TABS)[number];
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("id-ID", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-}
-
-function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString("id-ID", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 export default function VisitsTable({
   initialRows,
@@ -133,9 +119,9 @@ export default function VisitsTable({
                 {r.purpose}
               </span>
               <div className="text-muted-foreground text-xs">
-                <p>{formatDate(r.visitDate)}</p>
+                <p>{formatDateWIB(r.visitDate)}</p>
                 <p>
-                  {formatTime(r.windowStart)} – {formatTime(r.windowEnd)}
+                  {formatTimeWIB(r.windowStart)} – {formatTimeWIB(r.windowEnd)}
                 </p>
               </div>
               <span>

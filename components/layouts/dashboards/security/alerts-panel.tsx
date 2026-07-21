@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertTriangle, ShieldAlert, Ban, Clock } from "lucide-react";
+import { ShieldAlert, Ban, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatTimeWIB } from "@/lib/datetime";
 
 interface AlertItem {
   id: string;
@@ -10,6 +11,7 @@ interface AlertItem {
   company: string;
   since?: string | null;
   checkInAt?: string;
+  riskLevel?: string | null;
   reason?: string | null;
   at?: string;
 }
@@ -19,13 +21,6 @@ interface AlertsData {
   highRisk: AlertItem[];
   denied: AlertItem[];
   summary: { overstay: number; highRisk: number; denied: number };
-}
-
-function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString("id-ID", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 }
 
 export default function AlertsPanel() {
@@ -81,7 +76,7 @@ export default function AlertsPanel() {
               key={a.id}
               name={a.fullName}
               company={a.company}
-              meta={a.since ? `Window ended ${formatTime(a.since)}` : ""}
+              meta={a.since ? `Window ended ${formatTimeWIB(a.since)}` : ""}
               tone="destructive"
             />
           ))
@@ -104,30 +99,35 @@ export default function AlertsPanel() {
               key={a.id}
               name={a.fullName}
               company={a.company}
-              meta={a.checkInAt ? `Checked in ${formatTime(a.checkInAt)}` : ""}
-              tone="primary"
+              meta={[
+                a.riskLevel,
+                a.checkInAt ? `Checked in ${formatTimeWIB(a.checkInAt)}` : "",
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+              tone={a.riskLevel === "CRITICAL" ? "destructive" : "primary"}
             />
           ))
         )}
       </AlertSection>
 
-      {/* Denied today */}
+      {/* Denied entries */}
       <AlertSection
-        title="Denied Entries Today"
-        description="Entry attempts denied at the gate (incl. blacklist)"
+        title="Recent Denied Entries"
+        description="Last 20 entry attempts denied at the gate (incl. blacklist)"
         icon={Ban}
         accent="border-destructive text-destructive bg-destructive-muted"
         count={data.summary.denied}
       >
         {data.denied.length === 0 ? (
-          <EmptyRow text="No denied entries today." />
+          <EmptyRow text="No denied entries." />
         ) : (
           data.denied.map((a) => (
             <AlertRow
               key={a.id}
               name={a.fullName}
               company={a.company}
-              meta={`${a.at ? formatTime(a.at) : ""}${a.reason ? ` · ${a.reason}` : ""}`}
+              meta={`${a.at ? formatTimeWIB(a.at) : ""}${a.reason ? ` · ${a.reason}` : ""}`}
               tone="destructive"
             />
           ))

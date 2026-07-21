@@ -26,8 +26,6 @@ export async function GET() {
   }
 
   const now = Date.now();
-  const startOfToday = new Date();
-  startOfToday.setHours(0, 0, 0, 0);
 
   const inside = await prisma.checkEvent.findMany({
     where: { status: "INSIDE" },
@@ -57,20 +55,19 @@ export async function GET() {
     }));
 
   const highRisk = inside
-    .filter((e) => e.riskLevel === "HIGH")
+    .filter((e) => e.riskLevel === "HIGH" || e.riskLevel === "CRITICAL")
     .map((e) => ({
       id: e.id,
       fullName: e.Registration.fullName,
       company: e.Registration.company,
+      riskLevel: e.riskLevel,
       checkInAt: e.checkInAt.toISOString(),
     }));
 
-  const deniedToday = await prisma.checkEvent.findMany({
-    where: {
-      status: "DENIED",
-      createdAt: { gte: startOfToday },
-    },
+  const recentDenied = await prisma.checkEvent.findMany({
+    where: { status: "DENIED" },
     orderBy: { createdAt: "desc" },
+    take: 20,
     select: {
       id: true,
       createdAt: true,
@@ -79,7 +76,7 @@ export async function GET() {
     },
   });
 
-  const denied = deniedToday.map((e) => ({
+  const denied = recentDenied.map((e) => ({
     id: e.id,
     fullName: e.Registration.fullName,
     company: e.Registration.company,

@@ -9,6 +9,7 @@ import {
   readSnapshot,
   type EvacuationPerson,
 } from "@/lib/evacuation-snapshot";
+import { formatTimeWIB } from "@/lib/datetime";
 
 async function getStaffSession() {
   const cookieStore = await cookies();
@@ -21,15 +22,6 @@ async function getStaffSession() {
   } catch {
     return null;
   }
-}
-
-function formatTime(iso: string) {
-  return new Date(iso).toLocaleString("id-ID", {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 }
 
 async function buildPdf(
@@ -195,7 +187,7 @@ async function buildPdf(
         font,
         color,
       });
-      page.drawText(formatTime(p.checkInAt), {
+      page.drawText(formatTimeWIB(p.checkInAt), {
         x: cols.time,
         y,
         size: 8,

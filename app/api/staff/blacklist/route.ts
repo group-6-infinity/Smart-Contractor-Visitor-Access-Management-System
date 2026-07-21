@@ -29,9 +29,22 @@ export async function GET() {
     orderBy: { createdAt: "desc" },
   });
 
+  const registrationIds = entries
+    .map((e) => e.registrationId)
+    .filter((id): id is string => Boolean(id));
+
+  const registrations = await prisma.registration.findMany({
+    where: { id: { in: registrationIds } },
+    select: { id: true, company: true },
+  });
+  const companyById = new Map(registrations.map((r) => [r.id, r.company]));
+
   return NextResponse.json({
     entries: entries.map((e) => ({
       ...e,
+      company: e.registrationId
+        ? (companyById.get(e.registrationId) ?? null)
+        : null,
       createdAt: e.createdAt.toISOString(),
     })),
   });
