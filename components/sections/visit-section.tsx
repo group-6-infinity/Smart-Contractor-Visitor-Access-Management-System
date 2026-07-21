@@ -6,6 +6,7 @@ import CustomDialog from "@/components/common/c-dialog";
 import VisitRequestForm from "@/components/layouts/forms/visit-request-form";
 import { Button } from "@/components/ui/button";
 import { CheckIcon, Ban, LogIn, LogOut, AlertTriangle } from "lucide-react";
+import { formatDateWIB, formatTimeWIB } from "@/lib/datetime";
 
 interface DocInfo {
   type: string;
@@ -16,6 +17,7 @@ interface VisitData {
   id: string;
   purpose: string;
   visitDate: string;
+  visitToken: string;
   windowStart: string;
   windowEnd: string;
   status: string;
@@ -33,7 +35,6 @@ const statusConfig: Record<string, string> = {
   CANCELLED: "border-border text-muted-foreground bg-muted",
 };
 
-// badge berdasarkan check-in event terakhir (lebih informatif dari status visit)
 const CHECK_STATUS_CONFIG: Record<
   string,
   { label: string; className: string; icon: React.ElementType }
@@ -60,22 +61,6 @@ const CHECK_STATUS_CONFIG: Record<
   },
 };
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("id-ID", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
-}
-
-function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString("id-ID", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-// tentuin badge yang ditampilin: check-in event terakhir menang atas status visit
 function resolveBadge(visit: VisitData) {
   if (visit.checkStatus && CHECK_STATUS_CONFIG[visit.checkStatus]) {
     return {
@@ -93,12 +78,10 @@ function resolveBadge(visit: VisitData) {
 
 function GatePass({
   visit,
-  token,
   documents,
   zoneNames,
 }: {
   visit: VisitData;
-  token: string;
   documents: DocInfo[];
   zoneNames: Record<string, string>;
 }) {
@@ -115,11 +98,19 @@ function GatePass({
         </p>
       </div>
 
-      <div className="rounded-xl border bg-white p-4">
-        <QRCodeSVG value={token} size={220} level="H" marginSize={4} />
+      <div className="w-full max-w-55 rounded-xl border bg-white p-4">
+        <QRCodeSVG
+          value={visit.visitToken}
+          size={220}
+          level="H"
+          marginSize={4}
+          className="h-auto w-full"
+        />
       </div>
 
-      <p className="text-muted-foreground font-mono text-sm">{token}</p>
+      <p className="text-muted-foreground font-mono text-sm">
+        {visit.visitToken}
+      </p>
 
       <div className="bg-muted/40 w-full space-y-3 rounded-lg p-4">
         <p className="text-muted-foreground text-xs uppercase">Visit Detail</p>
@@ -133,13 +124,14 @@ function GatePass({
 
         <div className="flex items-center justify-between text-sm">
           <span className="text-muted-foreground">Date</span>
-          <span className="font-medium">{formatDate(visit.visitDate)}</span>
+          <span className="font-medium">{formatDateWIB(visit.visitDate)}</span>
         </div>
 
         <div className="flex items-center justify-between text-sm">
           <span className="text-muted-foreground">Window</span>
           <span className="font-medium">
-            {formatTime(visit.windowStart)} – {formatTime(visit.windowEnd)}
+            {formatTimeWIB(visit.windowStart)} –{" "}
+            {formatTimeWIB(visit.windowEnd)}
           </span>
         </div>
 
@@ -164,7 +156,7 @@ function GatePass({
         </div>
       </div>
 
-      {documents.length > 0 && (
+      {/* {documents.length > 0 && (
         <div className="bg-muted/40 w-full space-y-2 rounded-lg p-4">
           <p className="text-muted-foreground text-xs uppercase">
             Document Validity
@@ -194,7 +186,7 @@ function GatePass({
             );
           })}
         </div>
-      )}
+      )} */}
     </div>
   );
 }
@@ -279,7 +271,7 @@ export default function VisitSection({
                 className={`px-4 py-3 text-sm ${i % 2 === 1 ? "bg-muted/40" : ""}`}
               >
                 <div className="grid grid-cols-[1fr_2fr_1.2fr_0.8fr] items-center gap-4">
-                  <span>{formatDate(visit.visitDate)}</span>
+                  <span>{formatDateWIB(visit.visitDate)}</span>
                   <span className="truncate">{visit.purpose}</span>
                   <span>
                     <span
@@ -290,7 +282,6 @@ export default function VisitSection({
                     </span>
                   </span>
                   <span>
-                    {/* QR cuma muncul kalau approved + belum denied/checked-out */}
                     {visit.status === "APPROVED" &&
                     visit.checkStatus !== "CHECKED_OUT" ? (
                       <CustomDialog
@@ -303,7 +294,6 @@ export default function VisitSection({
                       >
                         <GatePass
                           visit={visit}
-                          token={token}
                           documents={documents}
                           zoneNames={zoneNames}
                         />
@@ -314,7 +304,6 @@ export default function VisitSection({
                   </span>
                 </div>
 
-                {/* Alasan denied — transparan ke visitor */}
                 {visit.checkStatus === "DENIED" && visit.deniedReason && (
                   <div className="border-destructive-border bg-destructive-muted text-destructive mt-2 rounded-md border p-2 text-xs">
                     <span className="font-semibold">Entry denied: </span>
