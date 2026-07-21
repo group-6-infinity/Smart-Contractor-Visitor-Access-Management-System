@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { LogOut, AlertTriangle, ShieldAlert, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { formatTimeWIB } from "@/lib/datetime";
 
 interface RosterRow {
   id: string;
@@ -23,14 +24,8 @@ const RISK_STYLE: Record<string, string> = {
   LOW: "text-success",
   MEDIUM: "text-info",
   HIGH: "text-destructive",
+  CRITICAL: "text-destructive font-bold",
 };
-
-function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString("id-ID", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 function formatDuration(mins: number) {
   const h = Math.floor(mins / 60);
@@ -157,7 +152,7 @@ export default function InsideRoster() {
                 {r.company}
               </span>
               <span className="text-muted-foreground">
-                {formatTime(r.checkInAt)}
+                {formatTimeWIB(r.checkInAt)}
               </span>
               <span
                 className={cn(
