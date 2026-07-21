@@ -9,6 +9,7 @@ interface VisitData {
   id: string;
   purpose: string;
   visitDate: string;
+  visitToken: string;
   windowStart: string;
   windowEnd: string;
   status: string;
@@ -19,6 +20,22 @@ interface VisitRequestFormProps {
   onSuccess: (visit: VisitData) => void;
   onCancel: () => void;
 }
+
+// tanggal minimal = besok, maksimal = 1 bulan dari hari ini
+const getToday = () => {
+  const d = new Date();
+  // hapus setDate(+1) — pakai hari ini
+  return d.toLocaleDateString("en-CA", { timeZone: "Asia/Jakarta" });
+};
+
+const getMaxDate = () => {
+  const d = new Date();
+  d.setMonth(d.getMonth() + 1);
+  return d.toLocaleDateString("en-CA", { timeZone: "Asia/Jakarta" });
+};
+
+const minDate = getToday(); // ← hari ini
+const maxDate = getMaxDate();
 
 export default function VisitRequestForm({
   token,
@@ -34,16 +51,6 @@ export default function VisitRequestForm({
 
   const isValid = visitDate && purpose && windowStart && windowEnd;
 
-  // tanggal minimal = besok, maksimal = 1 bulan dari hari ini
-  const today = new Date();
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const minDate = tomorrow.toISOString().slice(0, 10);
-
-  const maxDateObj = new Date(today);
-  maxDateObj.setMonth(maxDateObj.getMonth() + 1);
-  const maxDate = maxDateObj.toISOString().slice(0, 10);
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
@@ -53,7 +60,7 @@ export default function VisitRequestForm({
     const now = new Date();
     now.setHours(0, 0, 0, 0);
     const min = new Date(now);
-    min.setDate(min.getDate() + 1);
+    min.setDate(min.getDate());
     const max = new Date(now);
     max.setMonth(max.getMonth() + 1);
 
@@ -75,8 +82,8 @@ export default function VisitRequestForm({
     setLoading(true);
 
     try {
-      const startDateTime = `${visitDate}T${windowStart}:00`;
-      const endDateTime = `${visitDate}T${windowEnd}:00`;
+      const startDateTime = `${visitDate}T${windowStart}:00+07:00`;
+      const endDateTime = `${visitDate}T${windowEnd}:00+07:00`;
 
       const res = await fetch("/api/visit", {
         method: "POST",
@@ -107,7 +114,7 @@ export default function VisitRequestForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      <div className="grid sm:grid-cols-2 gap-6">
+      <div className="grid gap-6 sm:grid-cols-2">
         <Field>
           <FieldLabel htmlFor="visitDate" className="text-muted-foreground">
             Visit Date <span className="text-destructive">*</span>

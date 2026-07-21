@@ -3,9 +3,9 @@ import { jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { isBlacklisted } from "@/lib/blacklist";
+import { getExpiryStatus } from "@/lib/document-status";
 import { assessRisk } from "@/lib/risk-scoring";
 import { checkSchedule } from "@/lib/checkin-schedule";
-import { getExpiryStatus } from "@/lib/document-status";
 
 async function getStaffSession() {
   const cookieStore = await cookies();
@@ -34,43 +34,44 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ message: "Token is required" }, { status: 400 });
   }
 
-  const registration = await prisma.registration.findFirst({
-    where: { trackingToken: token },
+  // cari VISIT by visitToken (QR sekarang unik per-visit)
+  const visit = await prisma.visit.findUnique({
+    where: { visitToken: token },
     select: {
       id: true,
-      fullName: true,
-      company: true,
-      email: true,
-      type: true,
+      purpose: true,
+      visitDate: true,
+      windowStart: true,
+      windowEnd: true,
       status: true,
-      photoPath: true,
-      documents: {
-        where: { isActive: true },
-        select: { id: true, type: true, expiryDate: true, isVerified: true },
-      },
-      Visit: {
-        where: { status: "APPROVED" },
-        orderBy: { visitDate: "desc" },
-        take: 1,
+      authorizedZones: true,
+      Registration: {
         select: {
           id: true,
-          purpose: true,
-          visitDate: true,
-          windowStart: true,
-          windowEnd: true,
-          authorizedZones: true,
+          fullName: true,
+          company: true,
+          email: true,
+          type: true,
+          photoPath: true,
+          documents: {
+            where: { isActive: true },
+            select: { id: true, type: true, expiryDate: true, isVerified: true },
+          },
         },
       },
     },
   });
 
-  if (!registration) {
+  if (!visit) {
     return NextResponse.json(
       { valid: false, message: "Invalid token" },
       { status: 404 }
     );
   }
 
+  const registration = visit.Registration;
+
+  // === BLACKLIST HARD STOP ===
   const bl = await isBlacklisted({
     email: registration.email,
     registrationId: registration.id,
@@ -87,35 +88,26 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  if (registration.status !== "APPROVED") {
+  if (visit.status !== "APPROVED") {
     return NextResponse.json({
       valid: true,
       blocked: true,
       fullName: registration.fullName,
       company: registration.company,
-      message: "Registration is not approved.",
+      message: "This visit is not approved.",
     });
   }
 
-  const visit = registration.Visit[0];
-  if (!visit) {
-    return NextResponse.json({
-      valid: true,
-      blocked: true,
-      fullName: registration.fullName,
-      company: registration.company,
-      message: "No approved visit found.",
-    });
-  }
-
+  // cek jadwal
   const schedule = checkSchedule(
     visit.visitDate,
     visit.windowStart,
     visit.windowEnd
   );
 
+  // cek udah check-in belum (buat visit ini)
   const alreadyInside = await prisma.checkEvent.findFirst({
-    where: { registrationId: registration.id, status: "INSIDE" },
+    where: { visitId: visit.id, status: "INSIDE" },
     select: { id: true },
   });
 
@@ -133,11 +125,6 @@ export async function POST(req: NextRequest) {
   const hasExpiringSoon = documents.some(
     (d) => d.expiryStatus === "EXPIRING_SOON"
   );
-
-   const allZones = await prisma.zone.findMany({
-    select: { id: true, name: true },
-  });
-  const zoneNames = Object.fromEntries(allZones.map((z) => [z.id, z.name]));
 
   return NextResponse.json({
     valid: true,
@@ -160,7 +147,6 @@ export async function POST(req: NextRequest) {
       windowStart: visit.windowStart.toISOString(),
       windowEnd: visit.windowEnd.toISOString(),
       authorizedZones: visit.authorizedZones,
-      zoneNames
     },
     risk,
     documents,
