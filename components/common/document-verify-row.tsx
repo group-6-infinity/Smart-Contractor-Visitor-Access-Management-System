@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input";
 import { CheckCircle2, Circle, Eye } from "lucide-react";
 import CustomDialog from "@/components/common/c-dialog";
 
+const NO_EXPIRY_TYPES = ["KTP", "FACE_PHOTO"];
+
 interface DocRow {
   id: string;
   type: string;
@@ -30,7 +32,8 @@ export default function DocumentVerifyRow({
 
   const viewUrl = `/api/staff/documents/${doc.id}/view`;
   const today = new Date().toISOString().slice(0, 10);
-  const isExpiryValid = expiry !== "" && expiry > today;
+  const noExpiry = NO_EXPIRY_TYPES.includes(doc.type.toUpperCase());
+  const isExpiryValid = noExpiry || (expiry !== "" && expiry > today);
 
   // dokumen cuma bisa diubah kalau registrasi masih PENDING
   const locked = registrationStatus !== "PENDING";
@@ -46,7 +49,10 @@ export default function DocumentVerifyRow({
       const res = await fetch(`/api/staff/documents/${doc.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isVerified: verify, expiryDate: expiry || null }),
+        body: JSON.stringify({
+          isVerified: verify,
+          expiryDate: noExpiry ? null : expiry || null,
+        }),
       });
       if (res.ok) router.refresh();
     } finally {
@@ -79,17 +85,23 @@ export default function DocumentVerifyRow({
         </div>
 
         <div className="flex items-center gap-2">
-          <Input
-            type="date"
-            value={expiry}
-            min={today}
-            onChange={(e) => {
-              setExpiry(e.target.value);
-              setError(null);
-            }}
-            disabled={loading || locked || doc.isVerified}
-            className="border-border h-9 w-40 rounded-md border text-sm disabled:opacity-50 [&::-webkit-calendar-picker-indicator]:invert"
-          />
+          {noExpiry ? (
+            <span className="text-muted-foreground text-xs">
+              No expiry required
+            </span>
+          ) : (
+            <Input
+              type="date"
+              value={expiry}
+              min={today}
+              onChange={(e) => {
+                setExpiry(e.target.value);
+                setError(null);
+              }}
+              disabled={loading || locked || doc.isVerified}
+              className="border-border h-9 w-40 rounded-md border text-sm disabled:opacity-50 [&::-webkit-calendar-picker-indicator]:invert"
+            />
+          )}
           <Button
             size="sm"
             variant={doc.isVerified ? "outline" : "default"}
