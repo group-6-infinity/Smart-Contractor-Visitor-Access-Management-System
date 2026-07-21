@@ -3,6 +3,9 @@ import { jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { createNotification } from "@/lib/notifications";
+import { NotificationType } from "@/lib/generated/prisma/enums";
+
+const NO_EXPIRY_TYPES = ["KTP", "FACE_PHOTO"];
 
 async function getStaffSession() {
   const cookieStore = await cookies();
@@ -19,7 +22,7 @@ async function getStaffSession() {
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const session = await getStaffSession();
   if (!session || !["HSE_ADMIN", "HR_ADMIN"].includes(session.role)) {
@@ -27,8 +30,51 @@ export async function PATCH(
   }
 
   const { id } = await params;
-  const { expiryDate, noExpiry } = await req.json();
+  const { expiryDate, noExpiry, isVerified = true } = await req.json();
 
+  const doc = await prisma.documents.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      type: true,
+      Registration: { select: { id: true, fullName: true, status: true } },
+    },
+  });
+
+  if (!doc) {
+    return NextResponse.json({ message: "Document not found" }, { status: 404 });
+  }
+
+  // ============================================================
+  // UNVERIFY (isVerified: false)
+  // ============================================================
+  if (isVerified === false) {
+    await prisma.documents.update({
+      where: { id },
+      data: {
+        isVerified: false,
+        expiryDate: null,
+        verifiedById: null,
+        verifiedAt: null,
+      },
+    });
+
+    // registrasi ga lengkap lagi → turunin ke PENDING kalau tadinya APPROVED
+    if (doc.Registration.status === "APPROVED") {
+      await prisma.registration.update({
+        where: { id: doc.Registration.id },
+        data: { status: "PENDING" },
+      });
+    }
+
+    return NextResponse.json({
+      document: { id, isVerified: false, expiryDate: null },
+    });
+  }
+
+  // ============================================================
+  // VERIFY (isVerified: true)
+  // ============================================================
   let expiry: Date | null = null;
 
   if (noExpiry) {
@@ -37,7 +83,7 @@ export async function PATCH(
     if (!expiryDate) {
       return NextResponse.json(
         { message: "Expiry date is required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
     expiry = new Date(expiryDate);
@@ -46,32 +92,22 @@ export async function PATCH(
     if (expiry <= startOfToday) {
       return NextResponse.json(
         { message: "Expiry date must be a future date" },
-        { status: 400 }
+        { status: 400 },
       );
     }
   }
 
-  const doc = await prisma.documents.findUnique({
-    where: { id },
-    select: {
-      id: true,
-      type: true,
-      Registration: { select: { id: true, fullName: true } },
-    },
-  });
-
-  if (!doc) {
-    return NextResponse.json({ message: "Document not found" }, { status: 404 });
-  }
-
-  if (noExpiry && doc.type.toUpperCase() !== "KTP") {
+  if (noExpiry && !NO_EXPIRY_TYPES.includes(doc.type.toUpperCase())) {
     return NextResponse.json(
-      { message: "Only KTP can be verified without an expiry date" },
-      { status: 400 }
+      {
+        message:
+          "Only KTP and Face Photo can be verified without an expiry date",
+      },
+      { status: 400 },
     );
   }
 
-  const updated = await prisma.documents.update({
+  await prisma.documents.update({
     where: { id },
     data: {
       isVerified: true,
@@ -79,23 +115,54 @@ export async function PATCH(
       verifiedById: session.id,
       verifiedAt: new Date(),
     },
-    select: { id: true, isVerified: true, expiryDate: true },
   });
+
+  // ============================================================
+  // AUTO-APPROVE: semua dokumen verified + registrasi PENDING → APPROVED
+  // ============================================================
+  const reg = await prisma.registration.findUnique({
+    where: { id: doc.Registration.id },
+    select: {
+      id: true,
+      status: true,
+      documents: {
+        where: { isActive: true },
+        select: { isVerified: true },
+      },
+    },
+  });
+
+  let autoApproved = false;
+  if (reg && reg.status === "PENDING") {
+    const allVerified =
+      reg.documents.length > 0 && reg.documents.every((d) => d.isVerified);
+    if (allVerified) {
+      await prisma.registration.update({
+        where: { id: reg.id },
+        data: { status: "APPROVED" },
+      });
+      autoApproved = true;
+    }
+  }
 
   try {
     await createNotification({
-      type: "DOCUMENT_EXPIRY",
-      title: "Document re-verified",
-      message: `${doc.type} for ${doc.Registration.fullName} has been re-verified and is now valid.`,
+      type: NotificationType.DOCUMENT_EXPIRY,
+      title: autoApproved ? "Registration approved" : "Document verified",
+      message: autoApproved
+        ? `All documents for ${doc.Registration.fullName} are verified. Registration approved.`
+        : `${doc.type} for ${doc.Registration.fullName} has been verified.`,
     });
   } catch {
-    console.error("[NOTIFICATION] doc verify notify failed");
+    console.error("[NOTIFICATION] verify notify failed");
   }
 
   return NextResponse.json({
     document: {
-      ...updated,
-      expiryDate: updated.expiryDate?.toISOString() ?? null,
+      id,
+      isVerified: true,
+      expiryDate: expiry ? expiry.toISOString() : null,
     },
+    autoApproved,
   });
 }

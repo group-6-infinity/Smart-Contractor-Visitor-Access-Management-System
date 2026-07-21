@@ -34,6 +34,7 @@ model Visit {
   registrationId  String
   purpose         String
   visitDate       DateTime
+  visitToken      String       @unique
   windowStart     DateTime
   windowEnd       DateTime
   authorizedZones String[]

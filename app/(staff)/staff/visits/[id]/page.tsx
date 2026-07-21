@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, HardHat, User, CheckCircle2, Circle } from "lucide-react";
 import VisitReviewActions from "@/components/layouts/dashboards/visit-review-action";
+import { formatDateWIB, formatTimeWIB } from "@/lib/datetime";
 
 const STATUS_STYLE: Record<string, string> = {
   PENDING: "border-info-border text-info bg-info-muted",
@@ -12,17 +13,6 @@ const STATUS_STYLE: Record<string, string> = {
   COMPLETED: "border-border text-muted-foreground bg-muted",
   CANCELLED: "border-border text-muted-foreground bg-muted",
 };
-
-function formatDate(d: Date) {
-  return d.toLocaleDateString("id-ID", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
-}
-function formatTime(d: Date) {
-  return d.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
-}
 
 export default async function VisitDetailPage({
   params,
@@ -107,12 +97,12 @@ export default async function VisitDetailPage({
         </div>
         <div>
           <p className="text-muted-foreground text-xs uppercase">Date</p>
-          <p className="text-sm">{formatDate(visit.visitDate)}</p>
+          <p className="text-sm">{formatDateWIB(visit.visitDate)}</p>
         </div>
         <div>
           <p className="text-muted-foreground text-xs uppercase">Window</p>
           <p className="text-sm">
-            {formatTime(visit.windowStart)} – {formatTime(visit.windowEnd)}
+            {formatTimeWIB(visit.windowStart)} – {formatTimeWIB(visit.windowEnd)}
           </p>
         </div>
       </div>
@@ -148,7 +138,7 @@ export default async function VisitDetailPage({
                       className={`text-sm ${expired ? "text-destructive font-medium" : "text-muted-foreground"}`}
                     >
                       {expired ? "Expired " : "Valid until "}
-                      {new Date(doc.expiryDate).toLocaleDateString("id-ID")}
+                      {formatDateWIB(doc.expiryDate)}
                     </span>
                   ) : (
                     <span className="text-muted-foreground text-sm">

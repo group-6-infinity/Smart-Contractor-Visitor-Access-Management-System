@@ -25,7 +25,7 @@ const STATUS_STYLE: Record<string, string> = {
 const TABS = ["ALL", "PENDING", "APPROVED", "REJECTED"] as const;
 type Tab = (typeof TABS)[number];
 
-function formatDate(iso: string) {
+function formatDateUnused(iso: string) {
   return new Date(iso).toLocaleDateString("id-ID", {
     day: "numeric",
     month: "short",

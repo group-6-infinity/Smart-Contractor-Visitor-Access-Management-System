@@ -1,13 +1,19 @@
 import InformationCard from "@/components/common/information-card";
 import { Button } from "@/components/ui/button";
 import prisma from "@/lib/prisma";
-import { CheckIcon, HourglassIcon, ShieldX, XIcon } from "lucide-react";
+import {
+  ArrowLeftRight,
+  CheckIcon,
+  HourglassIcon,
+  ShieldX,
+  XIcon,
+} from "lucide-react";
 import Link from "next/link";
 import { cookies } from "next/headers";
 import EmailVerifyForm from "@/components/common/email-verify-form";
 import VisitSection from "@/components/sections/visit-section";
 import AuthLayout from "@/components/layouts/auth/auth-layout";
-import DocumentReupload from "@/components/common/document-reupload";
+import DocumentBatchReupload from "@/components/common/document-batch-reupload";
 
 export default async function TrackingStatusPage({
   params,
@@ -55,6 +61,20 @@ export default async function TrackingStatusPage({
   const sessionEmail = cookieStore.get(`track_session_${tokenUrl}`)?.value;
   const isVerified = registration && sessionEmail === registration.email;
 
+  // Kalau email yang sama juga punya registrasi dgn role lain (CONTRACTOR/VISITOR),
+  // kasih link buat pindah lihat status registrasi satunya. Aman karena baru di-query
+  // setelah email di halaman ini keverifikasi lewat session cookie, dan buka link
+  // registrasi lain tetap butuh verifikasi email terpisah untuk token itu.
+  const siblingRegistration = isVerified
+    ? await prisma.registration.findFirst({
+        where: {
+          email: registration.email,
+          type: registration.type === "CONTRACTOR" ? "VISITOR" : "CONTRACTOR",
+        },
+        select: { trackingToken: true, type: true },
+      })
+    : null;
+
   return (
     <AuthLayout>
       {!registration ? (
@@ -66,6 +86,7 @@ export default async function TrackingStatusPage({
           data={registration}
           tokenUrl={tokenUrl}
           zoneNames={zoneNames}
+          sibling={siblingRegistration}
         />
       )}
     </AuthLayout>
@@ -92,6 +113,7 @@ interface VisitData {
   visitDate: Date;
   windowStart: Date;
   windowEnd: Date;
+  visitToken: string;
   status: string;
   authorizedZones: string[];
   CheckEvent: CheckEventData[];
@@ -112,9 +134,19 @@ function getExpiryStatus(expiryDate: Date | null): string {
 function formatReadableDate(date: Date) {
   return new Date(date).toLocaleDateString("en-GB", {
     day: "numeric",
-    month: "short",
+    month: "long",
     year: "numeric",
   });
+}
+
+// Butuh update kalau expired/expiring, atau kalau belum verified tapi dokumen
+// lain di registrasi yang sama sudah verified (artinya ini sudah direview dan
+// ditolak staff, bukan sekadar belum sempat dicek).
+function isEligibleForUpdate(doc: DocData, allDocs: DocData[]): boolean {
+  const status = getExpiryStatus(doc.expiryDate);
+  if (status === "EXPIRED" || status === "EXPIRING_SOON") return true;
+  if (doc.isVerified) return false;
+  return allDocs.some((d) => d.id !== doc.id && d.isVerified);
 }
 
 function DocumentStatus({
@@ -137,6 +169,10 @@ function DocumentStatus({
     );
   }
 
+  const eligibleForUpdate = documents.filter((doc) =>
+    isEligibleForUpdate(doc, documents),
+  );
+
   return (
     <div className="w-full">
       <p className="border-border text-muted-foreground border-b pb-3 uppercase">
@@ -147,47 +183,43 @@ function DocumentStatus({
           const status = getExpiryStatus(doc.expiryDate);
           const expired = status === "EXPIRED";
           const expiringSoon = status === "EXPIRING_SOON";
-          const canUpdate = expired || expiringSoon;
           return (
             <div
               key={doc.id}
               className="border-border flex w-full items-center justify-between border-b p-3"
             >
               <p className="uppercase">{doc.type}</p>
-              <div className="flex items-center gap-3">
-                <p
-                  className={`text-sm font-medium ${
-                    expired
-                      ? "text-destructive"
-                      : expiringSoon
-                        ? "text-primary"
-                        : "text-muted-foreground"
-                  }`}
-                >
-                  {doc.isVerified ? "Verified" : "Unverified"}
-                  {doc.expiryDate
-                    ? ` · ${
-                        expired
-                          ? "Expired "
-                          : expiringSoon
-                            ? "Expiring "
-                            : "Valid until "
-                      }${formatReadableDate(doc.expiryDate)}`
-                    : " · No expiry"}
-                </p>
-                {/* Update: wajib kalau expired, proaktif kalau expiring soon */}
-                {canUpdate && (
-                  <DocumentReupload
-                    token={token}
-                    documentId={doc.id}
-                    documentType={doc.type}
-                  />
-                )}
-              </div>
+              <p
+                className={`text-sm font-medium ${
+                  expired
+                    ? "text-destructive"
+                    : expiringSoon
+                      ? "text-primary"
+                      : "text-muted-foreground"
+                }`}
+              >
+                {doc.isVerified ? "Verified" : "Unverified"}
+                {doc.expiryDate
+                  ? ` · ${
+                      expired
+                        ? "Expired "
+                        : expiringSoon
+                          ? "Expiring "
+                          : "Valid until "
+                    }${formatReadableDate(doc.expiryDate)}`
+                  : " · No expiry"}
+              </p>
             </div>
           );
         })}
       </div>
+
+      {/* Update: wajib kalau expired, proaktif kalau expiring soon - dikirim sekaligus dalam satu batch */}
+      {eligibleForUpdate.length > 0 && (
+        <div className="flex w-full justify-end pt-4">
+          <DocumentBatchReupload token={token} documents={eligibleForUpdate} />
+        </div>
+      )}
     </div>
   );
 }
@@ -230,16 +262,23 @@ function ValidToken({
   data,
   tokenUrl,
   zoneNames,
+  sibling,
 }: {
   data: DataProps;
   tokenUrl: string;
   zoneNames: Record<string, string>;
+  sibling: { trackingToken: string; type: string } | null;
 }) {
   const { fullName, company, status, rejectionReason, documents, Visit } = data;
 
+  const needsAttention = documents.some((d) =>
+    isEligibleForUpdate(d, documents),
+  );
+
   const messages: Record<string, string> = {
-    PENDING:
-      "Your registration is being reviewed by our HSE team. You'll receive an update right here no further action is needed for now.",
+    PENDING: needsAttention
+      ? "Your registration is being reviewed by our HSE team. One or more documents below need your attention before we can continue."
+      : "Your registration is being reviewed by our HSE team. You'll receive an update right here no further action is needed for now.",
   };
 
   const hasExpired = documents.some(
@@ -259,6 +298,16 @@ function ValidToken({
         <RegisStatusInfo status={status} />
       </div>
 
+      {sibling && (
+        <Link
+          href={`/track-status/${sibling.trackingToken}`}
+          className="text-muted-foreground hover:text-primary -mt-6 flex w-full items-center gap-1.5 text-sm underline underline-offset-4"
+        >
+          <ArrowLeftRight className="h-3.5 w-3.5" />
+          Switch to your {sibling.type.toLowerCase()} registration
+        </Link>
+      )}
+
       {rejectionReason && status === "REJECTED" && (
         <p className="text-destructive border-destructive-border w-full rounded-md border border-dashed p-3">
           {rejectionReason}
@@ -269,7 +318,7 @@ function ValidToken({
         <InformationCard message={messages["PENDING"]} />
       )}
 
-      {status === "APPROVED" && (
+      {(status === "PENDING" || status === "APPROVED") && (
         <>
           <DocumentStatus documents={documents} token={tokenUrl} />
 
@@ -285,32 +334,35 @@ function ValidToken({
             </div>
           )}
 
-          <VisitSection
-            token={tokenUrl}
-            visitDisabled={hasExpired}
-            initialVisits={Visit.map((v) => {
-              const lastEvent = v.CheckEvent[0];
-              return {
-                id: v.id,
-                purpose: v.purpose,
-                visitDate: v.visitDate.toISOString(),
-                windowStart: v.windowStart.toISOString(),
-                windowEnd: v.windowEnd.toISOString(),
-                status: v.status,
-                authorizedZones: v.authorizedZones,
-                checkStatus: lastEvent?.status ?? null,
-                deniedReason:
-                  lastEvent?.status === "DENIED"
-                    ? lastEvent.overrideJustification
-                    : null,
-              };
-            })}
-            documents={documents.map((d) => ({
-              type: d.type,
-              expiryDate: d.expiryDate ? d.expiryDate.toISOString() : null,
-            }))}
-            zoneNames={zoneNames}
-          />
+          {status === "APPROVED" && (
+            <VisitSection
+              token={tokenUrl}
+              visitDisabled={hasExpired}
+              initialVisits={Visit.map((v) => {
+                const lastEvent = v.CheckEvent[0];
+                return {
+                  id: v.id,
+                  purpose: v.purpose,
+                  visitDate: v.visitDate.toISOString(),
+                  windowStart: v.windowStart.toISOString(),
+                  windowEnd: v.windowEnd.toISOString(),
+                  status: v.status,
+                  visitToken: v.visitToken,
+                  authorizedZones: v.authorizedZones,
+                  checkStatus: lastEvent?.status ?? null,
+                  deniedReason:
+                    lastEvent?.status === "DENIED"
+                      ? lastEvent.overrideJustification
+                      : null,
+                };
+              })}
+              documents={documents.map((d) => ({
+                type: d.type,
+                expiryDate: d.expiryDate ? d.expiryDate.toISOString() : null,
+              }))}
+              zoneNames={zoneNames}
+            />
+          )}
         </>
       )}
     </div>

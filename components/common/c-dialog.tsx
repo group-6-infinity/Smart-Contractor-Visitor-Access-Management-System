@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/dialog";
 
 import React from "react";
+import { cn } from "@/lib/utils";
 
 interface CustomDialogProps {
   trigger: React.ReactNode;
@@ -31,7 +32,12 @@ export default function CustomDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
-      <DialogContent className={className}>
+      <DialogContent
+        className={cn(
+          "max-h-[90vh] w-[calc(100%-2rem)] overflow-y-auto sm:w-full",
+          className
+        )}
+      >
         {(title || description) && (
           <DialogHeader>
             {title && <DialogTitle>{title}</DialogTitle>}

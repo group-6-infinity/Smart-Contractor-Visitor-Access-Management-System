@@ -4,6 +4,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createNotification } from "@/lib/notifications";
 import { sendTelegramMessage } from "@/lib/telegram";
 import { NotificationType } from "@/lib/generated/prisma/enums";
+import { parseWIBDate } from "@/lib/datetime";
+import { generateVisitToken } from "@/lib/visit-token";
 
 export async function POST(req: NextRequest) {
   try {
@@ -48,18 +50,16 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // === validasi tanggal visit: besok s/d 1 bulan ===
     const visitDateObj = new Date(visitDate);
     const now = new Date();
     now.setHours(0, 0, 0, 0);
     const minDate = new Date(now);
-    minDate.setDate(minDate.getDate() + 1);
     const maxDate = new Date(now);
     maxDate.setMonth(maxDate.getMonth() + 1);
 
     if (visitDateObj < minDate) {
       return NextResponse.json(
-        { message: "Visit date must be at least tomorrow" },
+        { message: "Visit date cannot be in the past" },
         { status: 400 },
       );
     }
@@ -79,11 +79,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // generate token unik per-visit buat QR gate pass
+    const visitToken = await generateVisitToken();
+
     const visit = await prisma.visit.create({
       data: {
         registrationId: registration.id,
+        visitToken,
         purpose,
-        visitDate: new Date(visitDate),
+        visitDate: parseWIBDate(visitDate),
         windowStart: start,
         windowEnd: end,
         authorizedZones: [],
@@ -91,8 +95,11 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // === NOTIF ke HSE/HR — in-app + Telegram (best effort, ga ganggu response) ===
-    const visitDateStr = new Date(visitDate).toLocaleDateString("id-ID", {
+    // display tanggal pakai WIB
+    const visitDateStr = new Date(
+      visitDate + "T00:00:00+07:00",
+    ).toLocaleDateString("id-ID", {
+      timeZone: "Asia/Jakarta",
       day: "numeric",
       month: "long",
       year: "numeric",

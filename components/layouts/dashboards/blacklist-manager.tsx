@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ShieldX, Trash2, Plus } from "lucide-react";
+import { formatDateWIB } from "@/lib/datetime";
 
 interface BlacklistEntry {
   id: string;
@@ -11,14 +12,6 @@ interface BlacklistEntry {
   email: string;
   reason: string;
   createdAt: string;
-}
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("id-ID", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
 }
 
 export default function BlacklistManager({
@@ -188,7 +181,7 @@ export default function BlacklistManager({
               <span className="text-muted-foreground truncate">{e.email}</span>
               <span className="text-muted-foreground truncate">{e.reason}</span>
               <span className="text-muted-foreground text-xs">
-                {formatDate(e.createdAt)}
+                {formatDateWIB(e.createdAt)}
               </span>
               <button
                 onClick={() => handleRemove(e.id)}

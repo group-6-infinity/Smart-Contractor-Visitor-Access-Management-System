@@ -6,6 +6,7 @@ import { isBlacklisted } from "@/lib/blacklist";
 import { createNotification } from "@/lib/notifications";
 import { assessRisk } from "@/lib/risk-scoring";
 import { checkSchedule } from "@/lib/checkin-schedule";
+import { NotificationType } from "@/lib/generated/prisma/enums";
 
 async function getStaffSession() {
   const cookieStore = await cookies();
@@ -31,32 +32,28 @@ export async function POST(req: NextRequest) {
 
   const { token, override, justification } = await req.json();
 
-  const registration = await prisma.registration.findFirst({
-    where: { trackingToken: token },
+  const visit = await prisma.visit.findUnique({
+    where: { visitToken: token },
     select: {
       id: true,
-      fullName: true,
-      email: true,
       status: true,
-      Visit: {
-        where: { status: "APPROVED" },
-        orderBy: { visitDate: "desc" },
-        take: 1,
-        select: {
-          id: true,
-          authorizedZones: true,
-          visitDate: true,
-          windowStart: true,
-          windowEnd: true,
-        },
+      authorizedZones: true,
+      visitDate: true,
+      windowStart: true,
+      windowEnd: true,
+      Registration: {
+        select: { id: true, fullName: true, email: true },
       },
     },
   });
 
-  if (!registration) {
+  if (!visit) {
     return NextResponse.json({ message: "Invalid token" }, { status: 404 });
   }
 
+  const registration = visit.Registration;
+
+  // blacklist hard stop
   const bl = await isBlacklisted({
     email: registration.email,
     registrationId: registration.id,
@@ -71,18 +68,14 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  if (registration.status !== "APPROVED") {
+  if (visit.status !== "APPROVED") {
     return NextResponse.json(
-      { message: "Registration not approved" },
+      { message: "Visit not approved" },
       { status: 403 }
     );
   }
 
-  const visit = registration.Visit[0];
-  if (!visit) {
-    return NextResponse.json({ message: "No approved visit" }, { status: 403 });
-  }
-
+  // enforce jadwal
   const schedule = checkSchedule(
     visit.visitDate,
     visit.windowStart,
@@ -95,14 +88,16 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // double check-in guard (buat visit ini)
   const alreadyInside = await prisma.checkEvent.findFirst({
-    where: { registrationId: registration.id, status: "INSIDE" },
+    where: { visitId: visit.id, status: "INSIDE" },
     select: { id: true },
   });
   if (alreadyInside) {
     return NextResponse.json({ message: "Already checked in" }, { status: 409 });
   }
 
+  // dokumen expired → override. KTP/FACE_PHOTO (null) ga dihitung
   const expiredCount = await prisma.documents.count({
     where: {
       registrationId: registration.id,
@@ -147,7 +142,7 @@ export async function POST(req: NextRequest) {
   if (override) {
     try {
       await createNotification({
-        type: "BLACKLIST_ALERT",
+        type: NotificationType.BLACKLIST_ALERT,
         title: "Manual override at check-in",
         message: `${registration.fullName} was granted entry via override by ${session.email}. Justification: ${justification}`,
       });

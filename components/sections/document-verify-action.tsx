@@ -5,9 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import CustomDialog from "@/components/common/c-dialog";
 import { CheckCircle2 } from "lucide-react";
-
-// Tipe dokumen yang TIDAK punya expiry (cukup verify tanpa tanggal).
-// KTP Indonesia berlaku seumur hidup sejak 2011.
 const NO_EXPIRY_TYPES = ["KTP", "FACE_PHOTO"];
 
 export function isNoExpiryType(type: string): boolean {

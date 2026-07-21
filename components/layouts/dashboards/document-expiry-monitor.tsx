@@ -7,6 +7,7 @@ import { FileWarning, Clock, XCircle, Eye, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import CustomDialog from "@/components/common/c-dialog";
+import { RotateCcw } from "lucide-react";
 
 interface DocRow {
   id: string;
@@ -51,6 +52,8 @@ const FILTERS = [
   { value: "expired", label: "Expired" },
 ];
 
+const NO_EXPIRY_TYPES = ["KTP", "FACE_PHOTO"];
+
 function formatReadableDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-GB", {
     day: "numeric",
@@ -78,7 +81,9 @@ export default function DocumentExpiryMonitor() {
       if (!active) return;
       setLoading(true);
       try {
-        const res = await fetch(`/api/staff/documents/monitor?filter=${filter}`);
+        const res = await fetch(
+          `/api/staff/documents/monitor?filter=${filter}`,
+        );
         if (!res.ok || !active) return;
         const data = await res.json();
         if (!active) return;
@@ -136,7 +141,7 @@ export default function DocumentExpiryMonitor() {
               "relative px-4 py-2 text-sm font-medium transition-colors",
               filter === f.value
                 ? "text-foreground"
-                : "text-muted-foreground hover:text-foreground"
+                : "text-muted-foreground hover:text-foreground",
             )}
           >
             {f.label}
@@ -174,11 +179,13 @@ export default function DocumentExpiryMonitor() {
                   ? "bg-destructive-muted/30"
                   : i % 2 === 1
                     ? "bg-muted/20"
-                    : ""
+                    : "",
               )}
             >
               <span className="font-medium">{d.fullName}</span>
-              <span className="text-muted-foreground truncate">{d.company}</span>
+              <span className="text-muted-foreground truncate">
+                {d.company}
+              </span>
               <span>{d.type}</span>
               <span className="text-muted-foreground text-xs">
                 {d.expiryDate ? (
@@ -192,7 +199,7 @@ export default function DocumentExpiryMonitor() {
                             ? "text-destructive"
                             : d.daysLeft <= 7
                               ? "text-primary"
-                              : ""
+                              : "",
                         )}
                       >
                         (
@@ -211,7 +218,7 @@ export default function DocumentExpiryMonitor() {
                 <span
                   className={cn(
                     "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium",
-                    STATUS_STYLE[d.status]
+                    STATUS_STYLE[d.status],
                   )}
                 >
                   {STATUS_LABEL[d.status]}
@@ -232,9 +239,15 @@ export default function DocumentExpiryMonitor() {
                   <DocumentPreview docId={d.id} type={d.type} />
                 </CustomDialog>
 
-                {/* Verify cuma buat yang perlu review (unverified) */}
-                {d.status === "REVIEW" && (
-                  <VerifyAction docId={d.id} onDone={refresh} />
+                {/* Toggle verify/unverify berdasarkan isVerified */}
+                {d.isVerified ? (
+                  <DocumentUnverifyAction docId={d.id} onDone={refresh} />
+                ) : (
+                  <VerifyAction
+                    docId={d.id}
+                    docType={d.type}
+                    onDone={refresh}
+                  />
                 )}
 
                 <Link
@@ -255,9 +268,11 @@ export default function DocumentExpiryMonitor() {
 
 function VerifyAction({
   docId,
+  docType,
   onDone,
 }: {
   docId: string;
+  docType: string;
   onDone: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -265,8 +280,9 @@ function VerifyAction({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const noExpiry = NO_EXPIRY_TYPES.includes(docType.toUpperCase());
   const today = new Date().toISOString().slice(0, 10);
-  const isValid = expiry !== "" && expiry > today;
+  const isValid = noExpiry || (expiry !== "" && expiry > today);
 
   async function handleVerify() {
     setError(null);
@@ -276,14 +292,15 @@ function VerifyAction({
     }
     setLoading(true);
     try {
-      const res = await fetch(
-        `/api/staff/documents/${docId}/verify-reupload`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ expiryDate: expiry }),
-        }
-      );
+      const res = await fetch(`/api/staff/documents/${docId}/verify-upload`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          isVerified: true,
+          expiryDate: noExpiry ? null : expiry,
+          noExpiry,
+        }),
+      });
       const data = await res.json();
       if (!res.ok) {
         setError(data.message ?? "Verify failed");
@@ -302,7 +319,7 @@ function VerifyAction({
     <CustomDialog
       open={open}
       onOpenChange={setOpen}
-      title="Verify Document"
+      title={`Verify ${docType}`}
       trigger={
         <button className="text-success inline-flex cursor-pointer items-center gap-1 text-xs font-medium hover:underline">
           <CheckCircle2 className="h-3.5 w-3.5" />
@@ -311,27 +328,38 @@ function VerifyAction({
       }
     >
       <div className="space-y-4">
-        <p className="text-muted-foreground text-sm">
-          Set the new expiry date for this re-uploaded document. Once verified,
-          the person can submit visit requests again.
-        </p>
-
-        <div className="space-y-1">
-          <label className="text-muted-foreground text-sm">
-            Expiry date <span className="text-destructive">*</span>
-          </label>
-          <Input
-            type="date"
-            value={expiry}
-            min={today}
-            onChange={(e) => {
-              setExpiry(e.target.value);
-              setError(null);
-            }}
-            disabled={loading}
-            className="border-border rounded-md border [&::-webkit-calendar-picker-indicator]:invert"
-          />
-        </div>
+        {noExpiry ? (
+          <div className="border-info-border bg-info-muted text-info rounded-lg border p-3 text-sm">
+            <p className="font-semibold">{docType} has no expiry date</p>
+            <p className="mt-1">
+              This document type is valid for a lifetime. Verifying will mark it
+              as valid with no expiry.
+            </p>
+          </div>
+        ) : (
+          <>
+            <p className="text-muted-foreground text-sm">
+              Set the expiry date for this document. Once verified, the person
+              can submit visit requests.
+            </p>
+            <div className="space-y-1">
+              <label className="text-muted-foreground text-sm">
+                Expiry date <span className="text-destructive">*</span>
+              </label>
+              <Input
+                type="date"
+                value={expiry}
+                min={today}
+                onChange={(e) => {
+                  setExpiry(e.target.value);
+                  setError(null);
+                }}
+                disabled={loading}
+                className="border-border rounded-md border [&::-webkit-calendar-picker-indicator]:invert"
+              />
+            </div>
+          </>
+        )}
 
         {error && <p className="text-destructive text-sm">{error}</p>}
 
@@ -349,11 +377,52 @@ function VerifyAction({
             disabled={loading || !isValid}
             className="cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {loading ? "Verifying..." : "Verify & Set Expiry"}
+            {loading
+              ? "Verifying..."
+              : noExpiry
+                ? "Verify (No Expiry)"
+                : "Verify & Set Expiry"}
           </Button>
         </div>
       </div>
     </CustomDialog>
+  );
+}
+
+function DocumentUnverifyAction({
+  docId,
+  onDone,
+}: {
+  docId: string;
+  onDone: () => void;
+}) {
+  const [loading, setLoading] = useState(false);
+
+  async function handleUnverify() {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/staff/documents/${docId}/verify-upload`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isVerified: false }),
+      });
+      if (res.ok) onDone();
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      onClick={handleUnverify}
+      disabled={loading}
+      className="text-muted-foreground hover:text-foreground h-auto cursor-pointer gap-1 px-2 py-1 text-xs"
+    >
+      <RotateCcw className="h-3.5 w-3.5" />
+      {loading ? "..." : "Unverify"}
+    </Button>
   );
 }
 
@@ -398,7 +467,7 @@ function SummaryCard({
       <div
         className={cn(
           "flex h-10 w-10 items-center justify-center rounded-lg",
-          accent
+          accent,
         )}
       >
         <Icon className="h-5 w-5" />
