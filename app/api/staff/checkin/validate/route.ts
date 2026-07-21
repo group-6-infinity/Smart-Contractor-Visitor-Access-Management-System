@@ -126,6 +126,12 @@ export async function POST(req: NextRequest) {
     (d) => d.expiryStatus === "EXPIRING_SOON"
   );
 
+  const zones = await prisma.zone.findMany({
+    where: { id: { in: visit.authorizedZones } },
+    select: { id: true, name: true },
+  });
+  const zoneNames = Object.fromEntries(zones.map((z) => [z.id, z.name]));
+
   return NextResponse.json({
     valid: true,
     blocked: false,
@@ -147,6 +153,7 @@ export async function POST(req: NextRequest) {
       windowStart: visit.windowStart.toISOString(),
       windowEnd: visit.windowEnd.toISOString(),
       authorizedZones: visit.authorizedZones,
+      zoneNames,
     },
     risk,
     documents,
