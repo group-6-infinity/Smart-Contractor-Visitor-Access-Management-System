@@ -8,7 +8,7 @@ export default function Main() {
     <>
       <main
         id="home__main__content"
-        className="mx-auto my-auto max-w-5xl p-4 max-sm:py-10"
+        className="mx-auto my-auto max-w-5xl pt-14 p-4 max-sm:py-10"
       >
         <Header />
         <Content />
