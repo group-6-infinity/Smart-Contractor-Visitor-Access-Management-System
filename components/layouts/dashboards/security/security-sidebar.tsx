@@ -46,6 +46,12 @@ export default function SecuritySidebar({ staffName }: { staffName: string }) {
   const pathname = usePathname();
   const router = useRouter();
 
+  async function handleLogout() {
+    await fetch("/api/staff/logout", { method: "POST" });
+    router.push("/internal/staff/login");
+    router.refresh();
+  }
+
   return (
     <aside className="border-border bg-card flex h-svh w-64 flex-col border-r">
       {/* Brand */}
@@ -84,29 +90,28 @@ export default function SecuritySidebar({ staffName }: { staffName: string }) {
 
       {/* Footer — operator + logout */}
       <div className="border-border border-t p-3">
-        <div className="mb-2 flex items-center gap-2 px-2">
+        <div className="staff__info flex items-center gap-2">
           <Button
             variant="ghost"
             className="border-border block aspect-square rounded-full border bg-transparent px-2! uppercase hover:bg-transparent!"
           >
             {staffName.slice(0, 2)}
           </Button>
-          <div>
+          <div className="mb-2 px-3">
             <p className="truncate text-sm font-medium">{staffName}</p>
-            <p className="text-muted-foreground text-xs">Security Operator</p>
+            <p className="text-muted-foreground truncate text-xs">
+              Security Operator
+            </p>
           </div>
         </div>
-        <button
-          onClick={async () => {
-            await fetch("/api/staff/logout", { method: "POST" });
-            router.push("/internal/staff/login");
-            router.refresh();
-          }}
-          className="cursor-pointer text-muted-foreground hover:bg-muted hover:text-foreground flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors"
+        <Button
+          variant="ghost"
+          onClick={handleLogout}
+          className="text-muted-foreground hover:bg-muted hover:text-destructive flex w-full cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors"
         >
           <LogOut className="h-4 w-4" />
-          Logout
-        </button>
+          Sign out
+        </Button>
       </div>
     </aside>
   );
