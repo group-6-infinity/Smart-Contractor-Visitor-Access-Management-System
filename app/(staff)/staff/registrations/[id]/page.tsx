@@ -1,10 +1,11 @@
 import prisma from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, HardHat, User } from "lucide-react";
+import { ArrowLeft, HardHat, User, AlertTriangle } from "lucide-react";
 import RegistrationReviewActions from "@/components/common/registration-review-actions";
 import DocumentVerifyRow from "@/components/common/document-verify-row";
 import BlacklistAction from "@/components/layouts/dashboards/blacklist-action";
+import { getExpiryStatus } from "@/lib/document-status";
 
 const STATUS_STYLE: Record<string, string> = {
   PENDING: "border-info-border text-info bg-info-muted",
@@ -39,6 +40,10 @@ export default async function RegistrationDetailPage({
     select: { id: true, reason: true },
   });
 
+  const expiredDocs = registration.documents.filter(
+    (d) => getExpiryStatus(d.expiryDate) === "EXPIRED",
+  );
+
   return (
     <div className="mx-auto max-w-3xl p-8">
       <Link
@@ -70,6 +75,22 @@ export default async function RegistrationDetailPage({
           {registration.status}
         </span>
       </div>
+
+      {expiredDocs.length > 0 && (
+        <div className="border-destructive-border bg-destructive-muted text-destructive mb-6 flex items-start gap-3 rounded-lg border p-4 text-sm">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <div>
+            <p className="font-semibold">
+              {expiredDocs.length} expired document
+              {expiredDocs.length === 1 ? "" : "s"}
+            </p>
+            <p className="mt-0.5">
+              {expiredDocs.map((d) => d.type).join(", ")} — please request a
+              re-upload or re-verify with a new expiry date before approving.
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className="border-border mb-6 grid grid-cols-2 gap-4 rounded-lg border p-4">
         <div>
