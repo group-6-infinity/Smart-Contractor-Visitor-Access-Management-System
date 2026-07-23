@@ -13,6 +13,7 @@ import {
   Bell,
   FileCheck,
   Users,
+  BookOpen,
 } from "lucide-react";
 import { Button } from "../ui/button";
 
@@ -24,6 +25,7 @@ const NAV_ITEMS = [
   { label: "Who's Inside", href: "/staff/whos-inside", icon: Users },
   { label: "Blacklist", href: "/staff/blacklist", icon: ShieldBan },
   { label: "Notification", href: "/staff/notifications", icon: Bell },
+  { label: "Guide", href: "/staff/guide", icon: BookOpen },
 ];
 
 export default function StaffSidebar({

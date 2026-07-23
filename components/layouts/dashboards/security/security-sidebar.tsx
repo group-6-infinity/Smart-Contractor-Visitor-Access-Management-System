@@ -10,7 +10,9 @@ import {
   ShieldBan,
   LogOut,
   ShieldCheck,
+  BookOpen,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 const NAV = [
   {
@@ -33,13 +35,14 @@ const NAV = [
     label: "Watchlist",
     icon: ShieldBan,
   },
+  {
+    href: "/staff/security/guide",
+    label: "Guide",
+    icon: BookOpen,
+  },
 ];
 
-export default function SecuritySidebar({
-  staffName,
-}: {
-  staffName: string;
-}) {
+export default function SecuritySidebar({ staffName }: { staffName: string }) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -51,7 +54,7 @@ export default function SecuritySidebar({
           <ShieldCheck className="text-primary h-5 w-5" />
         </div>
         <div>
-          <p className="text-sm font-bold leading-tight">SecureGate</p>
+          <p className="text-sm leading-tight font-bold">SecureGate</p>
           <p className="text-primary text-xs font-medium">GATE A · Security</p>
         </div>
       </div>
@@ -69,7 +72,7 @@ export default function SecuritySidebar({
                 "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
                 active
                   ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
               )}
             >
               <Icon className="h-4 w-4" />
@@ -81,9 +84,17 @@ export default function SecuritySidebar({
 
       {/* Footer — operator + logout */}
       <div className="border-border border-t p-3">
-        <div className="mb-2 px-2">
-          <p className="truncate text-sm font-medium">{staffName}</p>
-          <p className="text-muted-foreground text-xs">Security Operator</p>
+        <div className="mb-2 flex items-center gap-2 px-2">
+          <Button
+            variant="ghost"
+            className="border-border block aspect-square rounded-full border bg-transparent px-2! uppercase hover:bg-transparent!"
+          >
+            {staffName.slice(0, 2)}
+          </Button>
+          <div>
+            <p className="truncate text-sm font-medium">{staffName}</p>
+            <p className="text-muted-foreground text-xs">Security Operator</p>
+          </div>
         </div>
         <button
           onClick={async () => {
