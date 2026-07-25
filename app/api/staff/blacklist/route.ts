@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createNotification } from "@/lib/notifications";
 import { sendTelegramMessage } from "@/lib/telegram";
 import { sendBlacklistEmail } from "@/lib/mailer";
+import { appendAuditLog } from "@/lib/audit-log";
 
 async function getStaffSession() {
   const cookieStore = await cookies();
@@ -131,6 +132,23 @@ export async function POST(req: NextRequest) {
     console.error("[EMAIL] blacklist notify failed:", emailErr);
   }
 
+  try {
+    await appendAuditLog({
+      action: "BLACKLIST_ADDED",
+      actorId: session.id,
+      actorEmail: session.email,
+      targetType: "Blacklist",
+      targetId: entry.id,
+      metadata: {
+        fullName: registration.fullName,
+        email: registration.email,
+        reason,
+      },
+    });
+  } catch (err) {
+    console.error("[AUDIT LOG] append failed", err);
+  }
+
   return NextResponse.json(
     { entry: { ...entry, createdAt: entry.createdAt.toISOString() } },
     { status: 201 }
@@ -150,13 +168,25 @@ export async function DELETE(req: NextRequest) {
 
   const entry = await prisma.blacklist.findUnique({
     where: { id },
-    select: { id: true },
   });
   if (!entry) {
     return NextResponse.json({ message: "Entry not found" }, { status: 404 });
   }
 
   await prisma.blacklist.delete({ where: { id } });
+
+  try {
+    await appendAuditLog({
+      action: "BLACKLIST_REMOVED",
+      actorId: session.id,
+      actorEmail: session.email,
+      targetType: "Blacklist",
+      targetId: entry.id,
+      metadata: { fullName: entry.fullName, email: entry.email },
+    });
+  } catch (err) {
+    console.error("[AUDIT LOG] append failed", err);
+  }
 
   return NextResponse.json({ message: "Blacklist entry removed" });
 }

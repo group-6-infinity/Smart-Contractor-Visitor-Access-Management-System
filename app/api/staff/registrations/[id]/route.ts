@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { sendTelegramMessage } from "@/lib/telegram";
 import { sendRegistrationEmail } from "@/lib/mailer";
 import { createNotification } from "@/lib/notifications";
+import { appendAuditLog } from "@/lib/audit-log";
 
 async function getStaffSession() {
   const cookieStore = await cookies();
@@ -146,7 +147,21 @@ export async function PATCH(
     console.error("[NOTIFICATION] create failed:", notifErr);
   }
 
-  return NextResponse.json({ registration: updated });
+  try {
+    await appendAuditLog({
+      action: action === "APPROVE" ? "REGISTRATION_APPROVED" : "REGISTRATION_REJECTED",
+      actorId: session.id,
+      actorEmail: session.email,
+      targetType: "Registration",
+      targetId: updated.id,
+      metadata: {
+        fullName: updated.fullName,
+        rejectionReason: updated.rejectionReason,
+      },
+    });
+  } catch (err) {
+    console.error("[AUDIT LOG] append failed", err);
+  }
 
   return NextResponse.json({ registration: updated });
 }

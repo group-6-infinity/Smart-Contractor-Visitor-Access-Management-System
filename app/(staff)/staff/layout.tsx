@@ -24,7 +24,9 @@ export default async function StaffLayout({
   }
 
   if (!session) redirect("/internal/staff/login");
-  if (session.role === "SECURITY_OPERATOR") return <>{children}</>;
+  if (session.role === "SECURITY_OPERATOR" || session.role === "SYSTEM_ADMIN") {
+    return <>{children}</>;
+  }
 
   return (
     <div className="flex">

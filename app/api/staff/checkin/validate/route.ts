@@ -6,6 +6,7 @@ import { isBlacklisted } from "@/lib/blacklist";
 import { getExpiryStatus } from "@/lib/document-status";
 import { assessRisk } from "@/lib/risk-scoring";
 import { checkSchedule } from "@/lib/checkin-schedule";
+import { appendAuditLog } from "@/lib/audit-log";
 
 async function getStaffSession() {
   const cookieStore = await cookies();
@@ -77,6 +78,24 @@ export async function POST(req: NextRequest) {
     registrationId: registration.id,
   });
   if (bl.blocked) {
+    try {
+      await appendAuditLog({
+        action: "BLACKLIST_BLOCKED",
+        actorId: session.id,
+        actorEmail: session.email,
+        targetType: "Registration",
+        targetId: registration.id,
+        metadata: {
+          fullName: registration.fullName,
+          email: registration.email,
+          reason: bl.reason,
+          visitId: visit.id,
+        },
+      });
+    } catch (err) {
+      console.error("[AUDIT LOG] append failed", err);
+    }
+
     return NextResponse.json({
       valid: true,
       blocked: true,

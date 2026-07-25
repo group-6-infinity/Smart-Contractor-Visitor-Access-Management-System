@@ -7,6 +7,7 @@ import { createNotification } from "@/lib/notifications";
 import { assessRisk } from "@/lib/risk-scoring";
 import { checkSchedule } from "@/lib/checkin-schedule";
 import { NotificationType } from "@/lib/generated/prisma/enums";
+import { appendAuditLog } from "@/lib/audit-log";
 
 async function getStaffSession() {
   const cookieStore = await cookies();
@@ -149,6 +150,27 @@ export async function POST(req: NextRequest) {
     } catch {
       console.error("[NOTIFICATION] override notify failed");
     }
+  }
+
+  try {
+    await appendAuditLog({
+      action: override ? "CHECK_IN_OVERRIDE" : "CHECK_IN",
+      actorId: session.id,
+      actorEmail: session.email,
+      targetType: "CheckEvent",
+      targetId: checkEvent.id,
+      metadata: {
+        registrationId: registration.id,
+        fullName: registration.fullName,
+        visitId: visit.id,
+        zones: visit.authorizedZones,
+        riskLevel: risk.level,
+        override: !!override,
+        justification: override ? justification : null,
+      },
+    });
+  } catch (err) {
+    console.error("[AUDIT LOG] append failed", err);
   }
 
   return NextResponse.json(
