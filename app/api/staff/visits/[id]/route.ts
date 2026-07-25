@@ -3,6 +3,7 @@ import prisma from "@/lib/prisma";
 import { jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
+import { appendAuditLog } from "@/lib/audit-log";
 
 async function getStaffSession() {
   const cookieStore = await cookies();
@@ -172,6 +173,22 @@ export async function PATCH(
     });
   } catch {
     console.error("[EMAIL] visit status notify failed");
+  }
+
+  try {
+    await appendAuditLog({
+      action: action === "APPROVE" ? "VISIT_APPROVED" : "VISIT_REJECTED",
+      actorId: session.id,
+      actorEmail: session.email,
+      targetType: "Visit",
+      targetId: updated.id,
+      metadata: {
+        fullName: visit.Registration.fullName,
+        authorizedZones: updated.authorizedZones,
+      },
+    });
+  } catch (err) {
+    console.error("[AUDIT LOG] append failed", err);
   }
 
   return NextResponse.json({ visit: updated });

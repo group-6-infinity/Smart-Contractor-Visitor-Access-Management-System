@@ -7,6 +7,7 @@ const ROLE_REDIRECT: Record<Role, string> = {
   SECURITY_OPERATOR: "/staff/security/checkin",
   HSE_ADMIN: "/staff/overview",
   HR_ADMIN: "/staff/overview",
+  SYSTEM_ADMIN: "/staff/admin/users",
 };
 const STAFF_LOGIN_URL = "/internal/staff/login";
 

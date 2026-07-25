@@ -150,6 +150,34 @@ model EvacuationSnapshot {
   updatedAt DateTime @updatedAt
 }
 
+// FR-006 / BR-003 / NFR-007: immutable, hash-chained audit trail.
+// Each record's `hash` = SHA-256(prevHash + action + actor + target + metadata + createdAt),
+// and `prevHash` must equal the previous record's `hash` — so editing or
+// deleting any past row breaks every hash after it. Appends are serialized
+// via a Postgres advisory lock (see lib/audit-log.ts) so the chain can't
+// fork under concurrent writes. There is intentionally no update/delete
+// path anywhere in the codebase for this model — only `create`.
+model AuditLog {
+  id         String   @id @default(cuid())
+  action     String
+  actorId    String?
+  actorEmail String?
+  targetType String?
+  targetId   String?
+  // Stored as a pre-serialized JSON string (not the `Json`/jsonb type) on
+  // purpose: Postgres jsonb does not preserve key order on round-trip, so
+  // re-serializing a jsonb column for hash verification produces a
+  // different byte string than what was originally hashed, even with zero
+  // tampering. Storing the exact string we hashed sidesteps that entirely.
+  metadata   String
+  prevHash   String
+  hash       String   @unique
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([targetType, targetId])
+}
+
 enum CheckStatus {
   INSIDE
   CHECKED_OUT
@@ -208,6 +236,7 @@ enum Role {
   SECURITY_OPERATOR
   HSE_ADMIN
   HR_ADMIN
+  SYSTEM_ADMIN
 }
 
 enum VisitStatus {

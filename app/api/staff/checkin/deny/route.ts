@@ -3,6 +3,7 @@ import prisma from "@/lib/prisma";
 import { jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
+import { appendAuditLog } from "@/lib/audit-log";
 
 
 async function getStaffSession() {
@@ -49,7 +50,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ message: "No approved visit" }, { status: 403 });
   }
 
-  await prisma.checkEvent.create({
+  const checkEvent = await prisma.checkEvent.create({
     data: {
       visitId: visit.id,
       registrationId: registration.id,
@@ -60,6 +61,24 @@ export async function POST(req: NextRequest) {
       overrideBy: session.id,
     },
   });
+
+  try {
+    await appendAuditLog({
+      action: "CHECK_IN_DENIED",
+      actorId: session.id,
+      actorEmail: session.email,
+      targetType: "CheckEvent",
+      targetId: checkEvent.id,
+      metadata: {
+        registrationId: registration.id,
+        fullName: registration.fullName,
+        visitId: visit.id,
+        reason: reason ?? null,
+      },
+    });
+  } catch (err) {
+    console.error("[AUDIT LOG] append failed", err);
+  }
 
   try {
     await createNotification({

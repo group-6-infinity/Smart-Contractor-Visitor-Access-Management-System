@@ -2,6 +2,7 @@ import prisma from "@/lib/prisma";
 import { jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
+import { appendAuditLog } from "@/lib/audit-log";
 
 async function getSession() {
   const cookieStore = await cookies();
@@ -63,6 +64,19 @@ export async function POST(req: NextRequest) {
       checkOutBy: session.id,
     },
   });
+
+  try {
+    await appendAuditLog({
+      action: "CHECK_OUT",
+      actorId: session.id,
+      actorEmail: session.email,
+      targetType: "CheckEvent",
+      targetId: checkEventId,
+      metadata: { finalStatus },
+    });
+  } catch (err) {
+    console.error("[AUDIT LOG] append failed", err);
+  }
 
   return NextResponse.json({
     message: "Checked out successfully",

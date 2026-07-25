@@ -35,6 +35,7 @@ export default async function DashboardPage() {
   const role = await getRole();
 
   if (role === "SECURITY_OPERATOR") redirect("/staff/security/checkin");
+  if (role === "SYSTEM_ADMIN") redirect("/staff/admin/users");
   if (role !== "HSE_ADMIN" && role !== "HR_ADMIN") {
     redirect("/internal/staff/login");
   }
