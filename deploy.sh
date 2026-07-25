@@ -32,7 +32,7 @@ trap 'echo "[$(date "+%Y-%m-%d %H:%M:%S")] DEPLOY FAILED — ref: $REF"; exit 1'
 
 git fetch origin
 git checkout "$REF"
-git pull origin "$REF" || true
+git reset --hard "origin/$REF"
 
 echo "Installing dependencies..."
 npm ci
