@@ -85,6 +85,7 @@ export async function PATCH(
       email: true,
       type: true,
       trackingToken: true,
+      documents: { select: { type: true, isVerified: true } },
     },
   });
 
@@ -97,6 +98,20 @@ export async function PATCH(
       { message: "Registration already reviewed" },
       { status: 409 },
     );
+  }
+
+  if (action === "APPROVE") {
+    const unverified = registration.documents.filter((d) => !d.isVerified);
+    if (unverified.length > 0) {
+      return NextResponse.json(
+        {
+          message: `Verify all documents before approving: ${unverified
+            .map((d) => d.type)
+            .join(", ")}`,
+        },
+        { status: 409 },
+      );
+    }
   }
 
   const updated = await prisma.registration.update({
