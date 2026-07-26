@@ -11,6 +11,7 @@ import {
   LogOut,
   ShieldCheck,
   BookOpen,
+  History,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -24,6 +25,11 @@ const NAV = [
     href: "/staff/security/roster",
     label: "Who's Inside",
     icon: Users,
+  },
+  {
+    href: "/staff/security/history",
+    label: "Visitor History",
+    icon: History,
   },
   {
     href: "/staff/security/alerts",

@@ -19,8 +19,8 @@ interface Zone {
 const RISK_STYLE: Record<string, string> = {
   LOW: "border-success-border text-success bg-success-muted",
   MEDIUM: "border-info-border text-info bg-info-muted",
-  HIGH: "border-destructive text-destructive bg-destructive-muted",
-  CRITICAL: "border-destructive text-destructive bg-destructive-muted",
+  HIGH: "border-destructive-border text-destructive bg-destructive-muted",
+  CRITICAL: "border-destructive-border text-destructive bg-destructive-muted",
 };
 
 export default function ZoneOccupancy({
@@ -68,7 +68,7 @@ export default function ZoneOccupancy({
                   {zone.riskLevel}
                 </span>
               </div>
-              <p className="text-sm font-medium">{zone.name}</p>
+              <p className="text-white text-sm font-medium">{zone.name}</p>
               <div className="text-muted-foreground flex items-center gap-1 text-sm">
                 <Users className="h-3.5 w-3.5" />
                 <span className="text-foreground font-semibold">{count}</span>

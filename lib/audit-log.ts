@@ -29,7 +29,10 @@ export type AuditAction =
   | "BLACKLIST_ADDED"
   | "BLACKLIST_REMOVED"
   | "STAFF_CREATED"
-  | "STAFF_UPDATED";
+  | "STAFF_UPDATED"
+  | "ZONE_CREATED"
+  | "ZONE_UPDATED"
+  | "VISIT_ZONES_UPDATED";
 
 interface AppendAuditLogInput {
   action: AuditAction;

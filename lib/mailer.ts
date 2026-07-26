@@ -8,6 +8,7 @@ import {
   visitApprovedEmailTemplate,
   visitRejectedEmailTemplate,
 } from "@/components/sections/emails/visit-status";
+import { encryptToken } from "@/lib/token-crypto";
 
 const transporter = nodemailer.createTransport({
   service: "gmail",
@@ -63,14 +64,21 @@ export async function sendRegistrationEmail({
   status?: RegistrationStatus;
   reason?: string;
 }) {
-  const trackingUrl = `${process.env.NEXT_PUBLIC_APP_URL}/track-status/${trackingToken}`;
+  const encryptedToken = encryptToken(trackingToken);
+  const trackingUrl = `${process.env.NEXT_PUBLIC_APP_URL}/track-status/${encryptedToken}`;
   const { subject, template } = EMAIL_CONFIG[status];
 
   await transporter.sendMail({
     from: `"SecureGate" <${process.env.GMAIL_USER}>`,
     to,
     subject,
-    html: template({ fullName, trackingToken, trackingUrl, type, reason }),
+    html: template({
+      fullName,
+      trackingToken: encryptedToken,
+      trackingUrl,
+      type,
+      reason,
+    }),
   });
 }
 
@@ -110,7 +118,7 @@ export async function sendVisitStatusEmail({
   visitToken?: string;
   reason?: string;
 }) {
-  const trackingUrl = `${process.env.NEXT_PUBLIC_APP_URL}/track-status/${trackingToken}`;
+  const trackingUrl = `${process.env.NEXT_PUBLIC_APP_URL}/track-status/${encryptToken(trackingToken)}`;
   const visitDateStr = new Date(visitDate).toLocaleDateString("id-ID", {
     day: "numeric",
     month: "long",

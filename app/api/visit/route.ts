@@ -50,31 +50,33 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const visitDateObj = new Date(visitDate);
-    const now = new Date();
-    now.setHours(0, 0, 0, 0);
-    const minDate = new Date(now);
-    const maxDate = new Date(now);
-    maxDate.setMonth(maxDate.getMonth() + 1);
-
-    if (visitDateObj < minDate) {
-      return NextResponse.json(
-        { message: "Visit date cannot be in the past" },
-        { status: 400 },
-      );
-    }
-    if (visitDateObj > maxDate) {
-      return NextResponse.json(
-        { message: "Visit date cannot be more than 1 month from today" },
-        { status: 400 },
-      );
-    }
-
+    // windowStart/windowEnd already arrive as WIB-offset ISO strings
+    // (`${date}T${time}:00+07:00`) from the frontend, so `start`/`end` are
+    // correct absolute instants — compare them directly against the real
+    // current instant instead of a date-only, timezone-naive check (which
+    // let someone submit e.g. 15:00 today even after 15:00 today had
+    // already passed).
     const start = new Date(windowStart);
     const end = new Date(windowEnd);
+
+    if (start.getTime() < Date.now()) {
+      return NextResponse.json(
+        { message: "Visit window cannot be in the past" },
+        { status: 400 },
+      );
+    }
     if (end <= start) {
       return NextResponse.json(
         { message: "Window end must be after window start" },
+        { status: 400 },
+      );
+    }
+
+    const maxDate = new Date();
+    maxDate.setMonth(maxDate.getMonth() + 1);
+    if (start.getTime() > maxDate.getTime()) {
+      return NextResponse.json(
+        { message: "Visit date cannot be more than 1 month from today" },
         { status: 400 },
       );
     }

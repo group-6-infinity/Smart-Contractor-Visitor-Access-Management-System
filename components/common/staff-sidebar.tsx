@@ -14,6 +14,7 @@ import {
   FileCheck,
   Users,
   BookOpen,
+  MapPin,
 } from "lucide-react";
 import { Button } from "../ui/button";
 
@@ -23,6 +24,7 @@ const NAV_ITEMS = [
   { label: "Visit Approvals", href: "/staff/visits", icon: CalendarCheck },
   { label: "Document Expiry", href: "/staff/document-expiry", icon: FileCheck },
   { label: "Who's Inside", href: "/staff/whos-inside", icon: Users },
+  { label: "Zones", href: "/staff/zones", icon: MapPin },
   { label: "Blacklist", href: "/staff/blacklist", icon: ShieldBan },
   { label: "Notification", href: "/staff/notifications", icon: Bell },
   { label: "Guide", href: "/staff/guide", icon: BookOpen },

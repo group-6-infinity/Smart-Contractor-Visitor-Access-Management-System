@@ -65,13 +65,28 @@ export default function QrScanner({
   }
 
   useEffect(() => {
+    // This component is freshly mounted every time the parent console
+    // resets after a completed check-in/deny/blacklist result (see
+    // checkin-console.tsx's "Scan Next" buttons) — so auto-starting here
+    // means clicking "Scan Next" re-arms the camera immediately instead
+    // of requiring a separate manual "Start Camera" click every time.
+    let active = true;
+    async function init() {
+      await Promise.resolve();
+      if (!active) return;
+      startScan();
+    }
+    init();
+
     return () => {
+      active = false;
       const scanner = scannerRef.current;
       if (scanner) {
         scanner.stop().then(() => scanner.clear()).catch(() => {});
         scannerRef.current = null;
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (

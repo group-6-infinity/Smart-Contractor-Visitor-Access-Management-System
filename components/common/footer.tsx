@@ -887,6 +887,3 @@ export default function Footer() {
     </footer>
   );
 }
-
-// 1763832041
-// naii-istriku
