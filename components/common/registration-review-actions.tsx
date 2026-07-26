@@ -9,6 +9,7 @@ interface DocStatus {
   id: string;
   type: string;
   expiryDate: string | null;
+  isVerified: boolean;
 }
 
 export default function RegistrationReviewActions({
@@ -24,14 +25,14 @@ export default function RegistrationReviewActions({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const missingExpiry = documents.filter((d) => !d.expiryDate);
+  const unverifiedDocs = documents.filter((d) => !d.isVerified);
 
   async function submit(action: "APPROVE" | "REJECT") {
     setError(null);
 
-    if (action === "APPROVE" && missingExpiry.length > 0) {
+    if (action === "APPROVE" && unverifiedDocs.length > 0) {
       setError(
-        `Set an expiry date for all documents before approving: ${missingExpiry
+        `Verify all documents before approving: ${unverifiedDocs
           .map((d) => d.type)
           .join(", ")}`
       );
@@ -65,12 +66,12 @@ export default function RegistrationReviewActions({
 
   return (
     <div className="border-border space-y-4 rounded-lg p-4">
-      {missingExpiry.length > 0 && !rejecting && (
+      {unverifiedDocs.length > 0 && !rejecting && (
         <div className="border-info-border bg-info-muted text-info flex items-start gap-2 rounded-md border p-3 text-sm">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
           <span>
-            Set an expiry date for all documents before approving:{" "}
-            <strong>{missingExpiry.map((d) => d.type).join(", ")}</strong>
+            Verify all documents before approving:{" "}
+            <strong>{unverifiedDocs.map((d) => d.type).join(", ")}</strong>
           </span>
         </div>
       )}
@@ -108,7 +109,7 @@ export default function RegistrationReviewActions({
               Reject
             </Button>
             <Button
-              disabled={loading || missingExpiry.length > 0}
+              disabled={loading || unverifiedDocs.length > 0}
               onClick={() => submit("APPROVE")}
               className="bg-success text-success-foreground hover:bg-success/90 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
             >

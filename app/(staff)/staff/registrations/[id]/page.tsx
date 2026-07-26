@@ -24,7 +24,10 @@ export default async function RegistrationDetailPage({
     where: { id },
     include: {
       documents: {
-        orderBy: { createdAt: "asc" },
+        // id tiebreaker: docs from one submission share an identical
+        // createdAt (same transaction), so createdAt alone leaves ties
+        // in non-deterministic order across queries.
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
         select: {
           id: true,
           type: true,
@@ -154,6 +157,7 @@ export default async function RegistrationDetailPage({
             id: d.id,
             type: d.type,
             expiryDate: d.expiryDate ? d.expiryDate.toISOString() : null,
+            isVerified: d.isVerified,
           }))}
         />
       )}
