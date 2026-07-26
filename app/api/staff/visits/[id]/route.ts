@@ -78,13 +78,16 @@ export async function PATCH(
   const { id } = await params;
   const { action, zones } = await req.json();
 
-  if (!["APPROVE", "REJECT"].includes(action)) {
+  if (!["APPROVE", "REJECT", "UPDATE_ZONES"].includes(action)) {
     return NextResponse.json({ message: "Invalid action" }, { status: 400 });
   }
 
-  if (action === "APPROVE" && (!Array.isArray(zones) || zones.length === 0)) {
+  if (
+    (action === "APPROVE" || action === "UPDATE_ZONES") &&
+    (!Array.isArray(zones) || zones.length === 0)
+  ) {
     return NextResponse.json(
-      { message: "Please assign at least one zone before approving" },
+      { message: "Please assign at least one zone" },
       { status: 400 },
     );
   }
@@ -113,6 +116,42 @@ export async function PATCH(
 
   if (!visit) {
     return NextResponse.json({ message: "Not found" }, { status: 404 });
+  }
+
+  // Editing zones is only meaningful on an already-approved visit — it's
+  // a separate action from the initial APPROVE/REJECT review below, which
+  // stays gated on PENDING.
+  if (action === "UPDATE_ZONES") {
+    if (visit.status !== "APPROVED") {
+      return NextResponse.json(
+        { message: "Only approved visits can have their zones edited" },
+        { status: 409 },
+      );
+    }
+
+    const updated = await prisma.visit.update({
+      where: { id },
+      data: { authorizedZones: zones },
+      select: { id: true, status: true, authorizedZones: true },
+    });
+
+    try {
+      await appendAuditLog({
+        action: "VISIT_ZONES_UPDATED",
+        actorId: session.id,
+        actorEmail: session.email,
+        targetType: "Visit",
+        targetId: updated.id,
+        metadata: {
+          fullName: visit.Registration.fullName,
+          authorizedZones: updated.authorizedZones,
+        },
+      });
+    } catch (err) {
+      console.error("[AUDIT LOG] append failed", err);
+    }
+
+    return NextResponse.json({ visit: updated });
   }
 
   if (visit.status !== "PENDING") {

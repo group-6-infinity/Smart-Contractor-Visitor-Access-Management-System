@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, HardHat, User, CheckCircle2, Circle } from "lucide-react";
 import VisitReviewActions from "@/components/layouts/dashboards/visit-review-action";
+import EditVisitZones from "@/components/layouts/dashboards/edit-visit-zones";
 import { formatDateWIB, formatTimeWIB } from "@/lib/datetime";
 
 const STATUS_STYLE: Record<string, string> = {
@@ -153,10 +154,17 @@ export default async function VisitDetailPage({
       </div>
 
       {visit.status === "APPROVED" && (
-        <div className="border-success-border bg-success-muted mb-6 rounded-lg border p-4">
-          <p className="text-success mb-2 text-xs font-semibold uppercase">
-            Authorized zones
-          </p>
+        <div className="border-success-border bg-success-muted mb-6 space-y-3 rounded-lg border p-4">
+          <div className="flex items-center justify-between">
+            <p className="text-success text-xs font-semibold uppercase">
+              Authorized zones
+            </p>
+            <EditVisitZones
+              visitId={visit.id}
+              zones={zones}
+              currentZoneIds={visit.authorizedZones}
+            />
+          </div>
           <div className="flex flex-wrap gap-2">
             {visit.authorizedZones.length > 0 ? (
               visit.authorizedZones.map((z) => (

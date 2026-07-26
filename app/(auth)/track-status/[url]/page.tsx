@@ -2,6 +2,7 @@ import InformationCard from "@/components/common/information-card";
 import { Button } from "@/components/ui/button";
 import prisma from "@/lib/prisma";
 import {
+  ArrowLeft,
   ArrowLeftRight,
   CheckIcon,
   HourglassIcon,
@@ -14,51 +15,55 @@ import EmailVerifyForm from "@/components/common/email-verify-form";
 import VisitSection from "@/components/sections/visit-section";
 import AuthLayout from "@/components/layouts/auth/auth-layout";
 import DocumentBatchReupload from "@/components/common/document-batch-reupload";
+import { decryptToken, encryptToken } from "@/lib/token-crypto";
 
 export default async function TrackingStatusPage({
   params,
 }: {
   params: Promise<{ url: string }>;
 }) {
-  const { url: tokenUrl } = await params;
+  const { url: encryptedTokenUrl } = await params;
+  const rawToken = decryptToken(encryptedTokenUrl);
   const cookieStore = await cookies();
 
-  const registration = await prisma.registration.findFirst({
-    where: { trackingToken: tokenUrl },
-    include: {
-      documents: {
-        where: { isActive: true },
-        select: {
-          id: true,
-          type: true,
-          expiryDate: true,
-          isVerified: true,
-        },
-      },
-      Visit: {
-        orderBy: { createdAt: "desc" },
+  const registration = rawToken
+    ? await prisma.registration.findFirst({
+        where: { trackingToken: rawToken },
         include: {
-          CheckEvent: {
-            orderBy: { createdAt: "desc" },
-            take: 1,
+          documents: {
+            where: { isActive: true },
             select: {
-              status: true,
-              overrideJustification: true,
-              checkInAt: true,
-              checkOutAt: true,
+              id: true,
+              type: true,
+              expiryDate: true,
+              isVerified: true,
+            },
+          },
+          Visit: {
+            orderBy: { createdAt: "desc" },
+            include: {
+              CheckEvent: {
+                orderBy: { createdAt: "desc" },
+                take: 1,
+                select: {
+                  status: true,
+                  overrideJustification: true,
+                  checkInAt: true,
+                  checkOutAt: true,
+                },
+              },
             },
           },
         },
-      },
-    },
-  });
+      })
+    : null;
 
   const allZones = await prisma.zone.findMany({
     select: { id: true, name: true },
   });
   const zoneNames = Object.fromEntries(allZones.map((z) => [z.id, z.name]));
 
-  const sessionEmail = cookieStore.get(`track_session_${tokenUrl}`)?.value;
+  const sessionEmail = cookieStore.get(`track_session_${rawToken}`)?.value;
   const isVerified = registration && sessionEmail === registration.email;
 
   // Kalau email yang sama juga punya registrasi dgn role lain (CONTRACTOR/VISITOR),
@@ -80,11 +85,12 @@ export default async function TrackingStatusPage({
       {!registration ? (
         <InvalidToken />
       ) : !isVerified ? (
-        <EmailVerifyForm token={tokenUrl} />
+        <EmailVerifyForm token={rawToken!} />
       ) : (
         <ValidToken
           data={registration}
-          tokenUrl={tokenUrl}
+          tokenUrl={rawToken!}
+          displayTokenUrl={encryptedTokenUrl}
           zoneNames={zoneNames}
           sibling={siblingRegistration}
         />
@@ -261,11 +267,13 @@ interface DataProps {
 function ValidToken({
   data,
   tokenUrl,
+  displayTokenUrl,
   zoneNames,
   sibling,
 }: {
   data: DataProps;
   tokenUrl: string;
+  displayTokenUrl: string;
   zoneNames: Record<string, string>;
   sibling: { trackingToken: string; type: string } | null;
 }) {
@@ -287,11 +295,20 @@ function ValidToken({
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col items-center justify-center gap-10 p-4">
+      <Link
+        href="/track-status"
+        className="text-muted-foreground hover:text-foreground -mb-4 flex w-full items-center gap-2 text-sm"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        Back to tracking search
+      </Link>
+
       <div className="profile__header flex w-full flex-col-reverse items-start justify-between max-sm:gap-4 sm:flex-row sm:items-end">
         <div className="space-y-1.75">
-          <p className="text-muted-foreground text-sm">
-            Tracking ID: <span className="font-semibold">{tokenUrl}</span>
-          </p>
+          {/* <p className="text-muted-foreground text-sm">
+            Tracking ID:{" "}
+            <span className="font-semibold">{displayTokenUrl}</span>
+          </p> */}
           <h2 className="text-3xl font-semibold uppercase">{fullName}</h2>
           <p className="text-muted-foreground uppercase">{company}</p>
         </div>
@@ -300,7 +317,7 @@ function ValidToken({
 
       {sibling && (
         <Link
-          href={`/track-status/${sibling.trackingToken}`}
+          href={`/track-status/${encryptToken(sibling.trackingToken)}`}
           className="text-muted-foreground hover:text-primary -mt-6 flex w-full items-center gap-1.5 text-sm underline underline-offset-4"
         >
           <ArrowLeftRight className="h-3.5 w-3.5" />

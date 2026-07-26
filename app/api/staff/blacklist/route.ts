@@ -22,7 +22,13 @@ async function getStaffSession() {
 
 export async function GET() {
   const session = await getStaffSession();
-  if (!session || !["HSE_ADMIN", "HR_ADMIN"].includes(session.role)) {
+  // read access is shared with Security (their "Watchlist" view is read-only —
+  // see the notice in blacklist-view.tsx); only POST/DELETE below stay
+  // restricted to HSE/HR, who actually manage the list.
+  if (
+    !session ||
+    !["HSE_ADMIN", "HR_ADMIN", "SECURITY_OPERATOR"].includes(session.role)
+  ) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
 

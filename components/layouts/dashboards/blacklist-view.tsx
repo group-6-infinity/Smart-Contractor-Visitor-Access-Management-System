@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ShieldBan, Info } from "lucide-react";
+import { ShieldBan, Info, Eye } from "lucide-react";
 import { formatDateWIB } from "@/lib/datetime";
+import CustomDialog from "@/components/common/c-dialog";
 
 interface BlacklistRow {
   id: string;
@@ -77,8 +78,24 @@ export default function BlacklistView() {
               <span className="text-muted-foreground truncate">
                 {e.company ?? "—"}
               </span>
-              <span className="text-muted-foreground truncate">
-                {e.reason}
+              <span className="flex items-center gap-1.5 overflow-hidden">
+                <span className="text-muted-foreground truncate">
+                  {e.reason}
+                </span>
+                <CustomDialog
+                  title={`Blacklist reason — ${e.fullName}`}
+                  className="max-w-md"
+                  trigger={
+                    <button
+                      className="text-primary shrink-0 cursor-pointer text-xs hover:underline"
+                      aria-label={`View full reason for ${e.fullName}`}
+                    >
+                      <Eye className="h-3.5 w-3.5" />
+                    </button>
+                  }
+                >
+                  <p className="text-sm whitespace-pre-wrap">{e.reason}</p>
+                </CustomDialog>
               </span>
               <span className="text-muted-foreground text-xs">
                 {formatDateWIB(e.createdAt)}

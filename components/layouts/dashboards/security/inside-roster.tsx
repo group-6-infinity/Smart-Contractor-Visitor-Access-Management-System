@@ -119,9 +119,10 @@ export default function InsideRoster() {
         </p>
       ) : (
         <div className="border-border overflow-hidden rounded-lg border">
-          <div className="bg-muted text-muted-foreground grid grid-cols-[1.4fr_1.4fr_1fr_0.9fr_0.9fr_1fr] gap-4 px-4 py-3 text-xs font-semibold uppercase">
+          <div className="bg-muted text-muted-foreground grid grid-cols-[1.2fr_1.2fr_1.2fr_1fr_0.8fr_0.8fr_1fr] gap-4 px-4 py-3 text-xs font-semibold uppercase">
             <span>Person</span>
             <span>Company</span>
+            <span>Zones</span>
             <span>Check-in</span>
             <span>Duration</span>
             <span>Risk</span>
@@ -131,7 +132,7 @@ export default function InsideRoster() {
             <div
               key={r.id}
               className={cn(
-                "grid grid-cols-[1.4fr_1.4fr_1fr_0.9fr_0.9fr_1fr] items-center gap-4 px-4 py-3 text-sm",
+                "grid grid-cols-[1.2fr_1.2fr_1.2fr_1fr_0.8fr_0.8fr_1fr] items-center gap-4 px-4 py-3 text-sm",
                 r.isOverstay
                   ? "bg-destructive-muted/30"
                   : i % 2 === 1
@@ -151,6 +152,20 @@ export default function InsideRoster() {
               <span className="text-muted-foreground truncate">
                 {r.company}
               </span>
+              <div className="flex flex-wrap gap-1">
+                {r.zones.length > 0 ? (
+                  r.zones.map((z) => (
+                    <span
+                      key={z}
+                      className="bg-muted rounded-full px-2 py-0.5 text-xs"
+                    >
+                      {z}
+                    </span>
+                  ))
+                ) : (
+                  <span className="text-muted-foreground text-xs">—</span>
+                )}
+              </div>
               <span className="text-muted-foreground">
                 {formatTimeWIB(r.checkInAt)}
               </span>

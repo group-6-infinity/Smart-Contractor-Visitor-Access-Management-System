@@ -119,7 +119,6 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(
           {
             message: `Email ini sudah terdaftar sebagai ${type} dan ${statusText}. Silakan gunakan link tracking dari email registrasi sebelumnya.`,
-            existingToken: existing.trackingToken,
           },
           { status: 409 },
         );

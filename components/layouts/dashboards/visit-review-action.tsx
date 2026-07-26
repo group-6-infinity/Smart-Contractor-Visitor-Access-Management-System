@@ -15,8 +15,8 @@ interface Zone {
 const RISK_STYLE: Record<string, string> = {
   LOW: "border-success-border text-success bg-success-muted",
   MEDIUM: "border-info-border text-info bg-info-muted",
-  HIGH: "border-destructive text-destructive bg-destructive-muted",
-  CRITICAL: "border-destructive text-destructive bg-destructive-muted",
+  HIGH: "border-destructive-border text-destructive bg-destructive-muted",
+  CRITICAL: "border-destructive-border text-destructive bg-destructive-muted",
 };
 
 export default function VisitReviewActions({

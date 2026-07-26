@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
-import { ShieldCheck } from "lucide-react";
+import { ArrowLeft, ShieldCheck } from "lucide-react";
 
 export default function EmailVerifyForm({ token }: { token: string }) {
   const router = useRouter();
@@ -42,6 +43,14 @@ export default function EmailVerifyForm({ token }: { token: string }) {
 
   return (
     <>
+      <Link
+        href="/track-status"
+        className="text-muted-foreground hover:text-foreground mb-2 flex w-full max-w-sm items-center justify-center gap-2 text-sm mx-auto"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        Back to tracking search
+      </Link>
+
       <div className="flex flex-col items-center gap-3 text-center">
         <div className="border-border bg-card flex p-3 items-center justify-center rounded-full border aspect-square">
           <ShieldCheck size={45} className="text-primary" />
@@ -80,7 +89,7 @@ export default function EmailVerifyForm({ token }: { token: string }) {
         {error && <FieldError className="text-sm italic">{error}</FieldError>}
 
         <Button
-          className="w-full mt-4"
+          className="w-full mt-4 cursor-pointer"
           onClick={handleVerify}
           disabled={loading || !email}
         >

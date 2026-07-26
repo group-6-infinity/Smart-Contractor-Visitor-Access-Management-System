@@ -78,14 +78,31 @@ export async function POST(req: NextRequest) {
     registrationId: registration.id,
   });
   if (bl.blocked) {
+    // Persist this as a real denied-entry event too — otherwise blacklist
+    // blocks (unlike manual "Deny Entry") never show up in the Alerts
+    // page's "Recent Denied Entries" list, since nothing was ever written
+    // to CheckEvent for this path before.
     try {
+      const checkEvent = await prisma.checkEvent.create({
+        data: {
+          visitId: visit.id,
+          registrationId: registration.id,
+          checkInBy: session.id,
+          zones: visit.authorizedZones,
+          status: "DENIED",
+          overrideJustification: `Blacklisted: ${bl.reason}`,
+          overrideBy: session.id,
+        },
+      });
+
       await appendAuditLog({
         action: "BLACKLIST_BLOCKED",
         actorId: session.id,
         actorEmail: session.email,
-        targetType: "Registration",
-        targetId: registration.id,
+        targetType: "CheckEvent",
+        targetId: checkEvent.id,
         metadata: {
+          registrationId: registration.id,
           fullName: registration.fullName,
           email: registration.email,
           reason: bl.reason,
@@ -93,7 +110,7 @@ export async function POST(req: NextRequest) {
         },
       });
     } catch (err) {
-      console.error("[AUDIT LOG] append failed", err);
+      console.error("[AUDIT LOG / DENIED EVENT] append failed", err);
     }
 
     return NextResponse.json({

@@ -43,6 +43,9 @@ export async function GET() {
     },
   });
 
+  const allZones = await prisma.zone.findMany({ select: { id: true, name: true } });
+  const zoneNames = Object.fromEntries(allZones.map((z) => [z.id, z.name]));
+
   const now = Date.now();
   const roster = events.map((e) => {
     const windowEnd = e.Visit?.windowEnd
@@ -62,7 +65,7 @@ export async function GET() {
       windowEnd: e.Visit?.windowEnd
         ? new Date(e.Visit.windowEnd).toISOString()
         : null,
-      zones: e.zones,
+      zones: e.zones.map((z) => zoneNames[z] ?? z),
       riskLevel: e.riskLevel,
       isOverride: e.isOverride,
       isOverstay,

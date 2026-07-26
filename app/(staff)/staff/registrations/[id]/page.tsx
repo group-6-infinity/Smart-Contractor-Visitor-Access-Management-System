@@ -24,6 +24,7 @@ export default async function RegistrationDetailPage({
     where: { id },
     include: {
       documents: {
+        orderBy: { createdAt: "asc" },
         select: {
           id: true,
           type: true,

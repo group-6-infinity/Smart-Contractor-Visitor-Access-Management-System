@@ -111,9 +111,9 @@ export default function TrackStatusPage() {
                             <TypeIcon className="h-3 w-3" />
                             {type.label}
                           </span>
-                          <span className="text-muted-foreground font-mono text-xs">
+                          {/* <span className="text-muted-foreground font-mono text-xs">
                             {reg.trackingToken}
-                          </span>
+                          </span> */}
                         </div>
                         <p className="font-semibold">{reg.fullName}</p>
                         <p className="text-muted-foreground text-sm">

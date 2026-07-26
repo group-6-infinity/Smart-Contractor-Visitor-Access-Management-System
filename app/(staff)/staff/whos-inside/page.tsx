@@ -25,12 +25,15 @@ export default async function WhosInsidePage() {
     },
   });
 
+  const allZones = await prisma.zone.findMany({ select: { id: true, name: true } });
+  const zoneNames = Object.fromEntries(allZones.map((z) => [z.id, z.name]));
+
   const rows = events.map((e) => ({
     id: e.id,
     fullName: e.Registration.fullName,
     company: e.Registration.company,
     type: e.Registration.type,
-    zones: e.zones,
+    zones: e.zones.map((z) => zoneNames[z] ?? z),
     purpose: e.Visit.purpose,
     checkInAt: e.checkInAt.toISOString(),
     windowEnd: e.Visit.windowEnd.toISOString(),

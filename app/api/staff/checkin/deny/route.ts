@@ -27,28 +27,24 @@ export async function POST(req: NextRequest) {
 
   const { token, reason } = await req.json();
 
-  const registration = await prisma.registration.findFirst({
-    where: { trackingToken: token },
+  // `token` here is the QR-scanned value, which is the per-visit
+  // `visitToken` (same lookup key used by validate/confirm) — not the
+  // registration-level `trackingToken`. Looking it up as a trackingToken
+  // always misses, which is why this route was 404ing on every deny.
+  const visit = await prisma.visit.findUnique({
+    where: { visitToken: token },
     select: {
       id: true,
-      fullName: true,
-      Visit: {
-        where: { status: "APPROVED" },
-        orderBy: { visitDate: "desc" },
-        take: 1,
-        select: { id: true, authorizedZones: true },
-      },
+      authorizedZones: true,
+      Registration: { select: { id: true, fullName: true } },
     },
   });
 
-  if (!registration) {
+  if (!visit) {
     return NextResponse.json({ message: "Invalid token" }, { status: 404 });
   }
 
-  const visit = registration.Visit[0];
-  if (!visit) {
-    return NextResponse.json({ message: "No approved visit" }, { status: 403 });
-  }
+  const registration = visit.Registration;
 
   const checkEvent = await prisma.checkEvent.create({
     data: {

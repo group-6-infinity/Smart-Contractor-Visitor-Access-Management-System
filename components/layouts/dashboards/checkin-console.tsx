@@ -320,6 +320,7 @@ export default function CheckinConsole() {
               onGrant={() => handleCheckin(false)}
               onOverride={() => setOverrideOpen(true)}
               onDeny={() => setDenyOpen(true)}
+              onScanNext={resetConsole}
             />
           )}
         </div>
@@ -463,12 +464,14 @@ function ApprovedView({
   onGrant,
   onOverride,
   onDeny,
+  onScanNext,
 }: {
   result: ValidateResult;
   loading: boolean;
   onGrant: () => void;
   onOverride: () => void;
   onDeny: () => void;
+  onScanNext: () => void;
 }) {
   const { registration, visit, risk, documents, needsOverride, alreadyInside } =
     result;
@@ -617,7 +620,7 @@ function ApprovedView({
           )}
         </div>
       ) : (
-        <Button variant="outline" onClick={onDeny} className="cursor-pointer">
+        <Button variant="outline" onClick={onScanNext} className="cursor-pointer">
           Scan Next
         </Button>
       )}
