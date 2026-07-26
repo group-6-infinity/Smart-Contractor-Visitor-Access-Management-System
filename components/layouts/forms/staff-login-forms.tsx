@@ -2,10 +2,12 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
+import Link from "next/link";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field, FieldError, FieldLabel, FieldSet } from "@/components/ui/field";
-import { Eye, EyeOff, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, ShieldCheck } from "lucide-react";
+import { cn } from "@/lib/utils";
 import AuthLayout from "../auth/auth-layout";
 
 export default function StaffLoginForm() {
@@ -42,6 +44,17 @@ export default function StaffLoginForm() {
   return (
     <AuthLayout>
       <div className="mx-auto flex w-full max-w-sm flex-col items-center justify-center space-y-8">
+        <Link
+          className={cn(
+            buttonVariants({ variant: "ghost" }),
+            "mx-auto flex items-center gap-2",
+          )}
+          href="/"
+        >
+          <ArrowLeft />
+          Back to home
+        </Link>
+
         {/* Header */}
         <div className="flex flex-col items-center gap-3 text-center">
           <div className="border-border bg-card flex h-12 w-12 items-center justify-center rounded-xl border">

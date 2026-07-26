@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Html5Qrcode } from "html5-qrcode";
 import { Button } from "@/components/ui/button";
-import { Camera, CameraOff } from "lucide-react";
+import { Camera, CameraOff, RotateCw } from "lucide-react";
 
 export default function QrScanner({
   onScan,
@@ -13,6 +13,7 @@ export default function QrScanner({
   disabled?: boolean;
 }) {
   const [scanning, setScanning] = useState(false);
+  const [reloading, setReloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const lockedRef = useRef(false);
@@ -64,6 +65,20 @@ export default function QrScanner({
     }
   }
 
+  // Forces a full teardown + reinit of the camera/decoder, for when the
+  // video feed silently freezes (scanning still reads true, Stop/Start
+  // alone doesn't recover it) — without this, the only fix was reloading
+  // the whole page.
+  async function reloadScan() {
+    setReloading(true);
+    try {
+      await stopScan();
+      await startScan();
+    } finally {
+      setReloading(false);
+    }
+  }
+
   useEffect(() => {
     // This component is freshly mounted every time the parent console
     // resets after a completed check-in/deny/blacklist result (see
@@ -104,17 +119,39 @@ export default function QrScanner({
 
       {error && <p className="text-destructive text-sm">{error}</p>}
 
-      {!scanning ? (
-        <Button onClick={startScan} disabled={disabled} className="cursor-pointer">
-          <Camera className="mr-1 h-4 w-4" />
-          Start Camera
+      <div className="flex gap-2">
+        {!scanning ? (
+          <Button
+            onClick={startScan}
+            disabled={disabled || reloading}
+            className="flex-1 cursor-pointer"
+          >
+            <Camera className="mr-1 h-4 w-4" />
+            Start Camera
+          </Button>
+        ) : (
+          <Button
+            variant="outline"
+            onClick={stopScan}
+            disabled={reloading}
+            className="flex-1 cursor-pointer"
+          >
+            <CameraOff className="mr-1 h-4 w-4" />
+            Stop Camera
+          </Button>
+        )}
+
+        <Button
+          variant="outline"
+          onClick={reloadScan}
+          disabled={disabled || reloading}
+          className="cursor-pointer"
+          aria-label="Reload scanner"
+          title="Reload scanner — use this if the camera feed freezes"
+        >
+          <RotateCw className={`h-4 w-4 ${reloading ? "animate-spin" : ""}`} />
         </Button>
-      ) : (
-        <Button variant="outline" onClick={stopScan} className="cursor-pointer">
-          <CameraOff className="mr-1 h-4 w-4" />
-          Stop Camera
-        </Button>
-      )}
+      </div>
     </div>
   );
 }

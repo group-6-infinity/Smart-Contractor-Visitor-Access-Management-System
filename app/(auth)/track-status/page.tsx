@@ -2,13 +2,26 @@
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowLeft, ChevronRight } from "lucide-react";
 import Image from "next/image";
 import { RegistrationItem } from "@/const/interfaces/reg-prop.inteface";
 import { statusConfig, typeConfig } from "@/const/data/status-config-item";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+
+// Lets "Back to tracking search" from the detail page skip re-entering
+// the email, without turning it into a permanent bypass — the cached
+// result list expires after CACHE_TTL_MS and sessionStorage itself is
+// cleared once the tab closes.
+const CACHE_KEY = "track-status-search-cache";
+const CACHE_TTL_MS = 10 * 60 * 1000;
+
+interface SearchCache {
+  email: string;
+  registrations: RegistrationItem[];
+  timestamp: number;
+}
 
 export default function TrackStatusPage() {
   const [email, setEmail] = useState("");
@@ -18,6 +31,32 @@ export default function TrackStatusPage() {
     null,
   );
   const [searchedEmail, setSearchedEmail] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      await Promise.resolve();
+      if (!active) return;
+
+      const raw = sessionStorage.getItem(CACHE_KEY);
+      if (!raw) return;
+      try {
+        const cached: SearchCache = JSON.parse(raw);
+        if (Date.now() - cached.timestamp < CACHE_TTL_MS) {
+          setEmail(cached.email);
+          setSearchedEmail(cached.email);
+          setRegistrations(cached.registrations);
+        } else {
+          sessionStorage.removeItem(CACHE_KEY);
+        }
+      } catch {
+        sessionStorage.removeItem(CACHE_KEY);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   async function handleFind() {
     setLoading(true);
@@ -41,6 +80,22 @@ export default function TrackStatusPage() {
     setRegistrations(data.registrations);
     setSearchedEmail(email);
     setLoading(false);
+    sessionStorage.setItem(
+      CACHE_KEY,
+      JSON.stringify({
+        email,
+        registrations: data.registrations,
+        timestamp: Date.now(),
+      } satisfies SearchCache),
+    );
+  }
+
+  function handleReset() {
+    sessionStorage.removeItem(CACHE_KEY);
+    setRegistrations(null);
+    setSearchedEmail("");
+    setEmail("");
+    setError(null);
   }
 
   return (
@@ -64,6 +119,15 @@ export default function TrackStatusPage() {
                 ? `Showing results for ${searchedEmail}`
                 : "Enter your email address to find your registration status."}
             </p>
+            {registrations && (
+              <button
+                type="button"
+                onClick={handleReset}
+                className="text-primary cursor-pointer text-xs underline underline-offset-4"
+              >
+                Search a different email
+              </button>
+            )}
           </div>
 
           {!registrations && (
