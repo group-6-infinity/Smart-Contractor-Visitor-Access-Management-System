@@ -878,7 +878,7 @@ export default function Footer() {
             &copy; {currentYear} SecureGate&trade;. All rights reserved.
           </p>
           <p className="flex items-center gap-2">
-            <span>Version 1.0.0</span>
+            <span>Version 2.0.0</span>
             <span className="text-muted-foreground/50">·</span>
             <span>Built by Group 6 | Infinity</span>
           </p>
