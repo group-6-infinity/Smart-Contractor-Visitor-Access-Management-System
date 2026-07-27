@@ -3,12 +3,21 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { CheckIcon, XIcon } from "lucide-react";
+import { CheckIcon, XIcon, AlertCircle } from "lucide-react";
+
+interface DocStatus {
+  id: string;
+  type: string;
+  expiryDate: string | null;
+  isVerified: boolean;
+}
 
 export default function RegistrationReviewActions({
   registrationId,
+  documents,
 }: {
   registrationId: string;
+  documents: DocStatus[];
 }) {
   const router = useRouter();
   const [rejecting, setRejecting] = useState(false);
@@ -16,8 +25,19 @@ export default function RegistrationReviewActions({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const unverifiedDocs = documents.filter((d) => !d.isVerified);
+
   async function submit(action: "APPROVE" | "REJECT") {
     setError(null);
+
+    if (action === "APPROVE" && unverifiedDocs.length > 0) {
+      setError(
+        `Verify all documents before approving: ${unverifiedDocs
+          .map((d) => d.type)
+          .join(", ")}`
+      );
+      return;
+    }
 
     if (action === "REJECT" && !reason.trim()) {
       setError("Please provide a rejection reason.");
@@ -31,14 +51,11 @@ export default function RegistrationReviewActions({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action, rejectionReason: reason }),
       });
-
       const data = await res.json();
-
       if (!res.ok) {
         setError(data.message ?? "Action failed");
         return;
       }
-
       router.refresh();
     } catch {
       setError("Something went wrong. Please try again.");
@@ -48,7 +65,17 @@ export default function RegistrationReviewActions({
   }
 
   return (
-    <div className="border-border space-y-4 rounded-lg border p-4">
+    <div className="border-border space-y-4 rounded-lg p-4">
+      {unverifiedDocs.length > 0 && !rejecting && (
+        <div className="border-info-border bg-info-muted text-info flex items-start gap-2 rounded-md border p-3 text-sm">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>
+            Verify all documents before approving:{" "}
+            <strong>{unverifiedDocs.map((d) => d.type).join(", ")}</strong>
+          </span>
+        </div>
+      )}
+
       {rejecting && (
         <div className="space-y-2">
           <label className="text-muted-foreground text-sm">
@@ -82,9 +109,9 @@ export default function RegistrationReviewActions({
               Reject
             </Button>
             <Button
-              disabled={loading}
+              disabled={loading || unverifiedDocs.length > 0}
               onClick={() => submit("APPROVE")}
-              className="bg-success text-success-foreground hover:bg-success/90 cursor-pointer"
+              className="bg-success text-success-foreground hover:bg-success/90 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
             >
               <CheckIcon className="mr-1 h-4 w-4" />
               {loading ? "Approving..." : "Approve"}
@@ -107,7 +134,7 @@ export default function RegistrationReviewActions({
             <Button
               disabled={loading}
               onClick={() => submit("REJECT")}
-              className="bg-destructive text-white hover:bg-destructive/90 cursor-pointer"
+              className="bg-destructive cursor-pointer text-white hover:bg-destructive/90"
             >
               {loading ? "Rejecting..." : "Confirm rejection"}
             </Button>

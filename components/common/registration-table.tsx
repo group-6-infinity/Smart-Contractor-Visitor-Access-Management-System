@@ -3,8 +3,9 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { ChevronRight, HardHat, User } from "lucide-react";
+import { ChevronRight, HardHat, Search, User } from "lucide-react";
 import { Button } from "../ui/button";
+import { Input } from "../ui/input";
 
 interface RegistrationRow {
   id: string;
@@ -25,7 +26,7 @@ const STATUS_STYLE: Record<string, string> = {
 const TABS = ["ALL", "PENDING", "APPROVED", "REJECTED"] as const;
 type Tab = (typeof TABS)[number];
 
-function formatDate(iso: string) {
+function formatDateUnused(iso: string) {
   return new Date(iso).toLocaleDateString("id-ID", {
     day: "numeric",
     month: "short",
@@ -39,6 +40,7 @@ export default function RegistrationsTable({
   initialRows: RegistrationRow[];
 }) {
   const [tab, setTab] = useState<Tab>("ALL");
+  const [query, setQuery] = useState("");
 
   const counts = useMemo(
     () => ({
@@ -51,12 +53,31 @@ export default function RegistrationsTable({
   );
 
   const filtered = useMemo(() => {
-    if (tab === "ALL") return initialRows;
-    return initialRows.filter((r) => r.status === tab);
-  }, [tab, initialRows]);
+    const byTab =
+      tab === "ALL" ? initialRows : initialRows.filter((r) => r.status === tab);
+
+    const q = query.trim().toLowerCase();
+    if (!q) return byTab;
+    return byTab.filter(
+      (r) =>
+        r.fullName.toLowerCase().includes(q) ||
+        r.company.toLowerCase().includes(q) ||
+        r.trackingToken.toLowerCase().includes(q),
+    );
+  }, [tab, query, initialRows]);
 
   return (
     <div className="space-y-4">
+      <div className="relative w-full max-w-sm">
+        <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+        <Input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search by name or company..."
+          className="pl-9"
+        />
+      </div>
+
       <div className="border-border flex gap-1 border-b pb-2">
         {TABS.map((t) => (
           <Button

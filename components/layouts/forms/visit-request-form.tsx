@@ -9,6 +9,7 @@ interface VisitData {
   id: string;
   purpose: string;
   visitDate: string;
+  visitToken: string;
   windowStart: string;
   windowEnd: string;
   status: string;
@@ -19,6 +20,34 @@ interface VisitRequestFormProps {
   onSuccess: (visit: VisitData) => void;
   onCancel: () => void;
 }
+
+// tanggal minimal = besok, maksimal = 1 bulan dari hari ini
+const getToday = () => {
+  const d = new Date();
+  // hapus setDate(+1) — pakai hari ini
+  return d.toLocaleDateString("en-CA", { timeZone: "Asia/Jakarta" });
+};
+
+const getMaxDate = () => {
+  const d = new Date();
+  d.setMonth(d.getMonth() + 1);
+  return d.toLocaleDateString("en-CA", { timeZone: "Asia/Jakarta" });
+};
+
+// "HH:MM" right now in WIB — used to floor the time picker when the
+// selected date is today, so the UI doesn't let you pick a time that's
+// already passed.
+const getCurrentWIBTime = () => {
+  const d = new Date();
+  return d.toLocaleTimeString("en-GB", {
+    timeZone: "Asia/Jakarta",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
+const minDate = getToday(); // ← hari ini
+const maxDate = getMaxDate();
 
 export default function VisitRequestForm({
   token,
@@ -33,16 +62,37 @@ export default function VisitRequestForm({
   const [loading, setLoading] = useState(false);
 
   const isValid = visitDate && purpose && windowStart && windowEnd;
+  const isToday = visitDate === minDate;
+  const minTimeToday = isToday ? getCurrentWIBTime() : undefined;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+
+    if (visitDate > maxDate) {
+      setError("Visit date cannot be more than 1 month from today.");
+      return;
+    }
+
+    // validasi window: end harus setelah start
+    if (windowEnd <= windowStart) {
+      setError("Window end must be after window start.");
+      return;
+    }
+
+    const startDateTime = `${visitDate}T${windowStart}:00+07:00`;
+    const endDateTime = `${visitDate}T${windowEnd}:00+07:00`;
+
+    // validasi instant asli (tanggal + jam, bukan cuma tanggal) — jangan
+    // sampai bisa submit jam 15:00 hari ini padahal sekarang udah lewat jam segitu
+    if (new Date(startDateTime).getTime() < Date.now()) {
+      setError("Visit window cannot be in the past.");
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const startDateTime = `${visitDate}T${windowStart}:00`;
-      const endDateTime = `${visitDate}T${windowEnd}:00`;
-
       const res = await fetch("/api/visit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -72,7 +122,7 @@ export default function VisitRequestForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid gap-6 sm:grid-cols-2">
         <Field>
           <FieldLabel htmlFor="visitDate" className="text-muted-foreground">
             Visit Date <span className="text-destructive">*</span>
@@ -81,6 +131,8 @@ export default function VisitRequestForm({
             id="visitDate"
             type="date"
             value={visitDate}
+            min={minDate}
+            max={maxDate}
             onChange={(e) => {
               setVisitDate(e.target.value);
               setError(null);
@@ -118,6 +170,7 @@ export default function VisitRequestForm({
             id="windowStart"
             type="time"
             value={windowStart}
+            min={minTimeToday}
             onChange={(e) => {
               setWindowStart(e.target.value);
               setError(null);

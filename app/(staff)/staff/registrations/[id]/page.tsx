@@ -1,9 +1,11 @@
 import prisma from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, HardHat, User } from "lucide-react";
+import { ArrowLeft, HardHat, User, AlertTriangle } from "lucide-react";
 import RegistrationReviewActions from "@/components/common/registration-review-actions";
 import DocumentVerifyRow from "@/components/common/document-verify-row";
+import BlacklistAction from "@/components/layouts/dashboards/blacklist-action";
+import { getExpiryStatus } from "@/lib/document-status";
 
 const STATUS_STYLE: Record<string, string> = {
   PENDING: "border-info-border text-info bg-info-muted",
@@ -22,6 +24,10 @@ export default async function RegistrationDetailPage({
     where: { id },
     include: {
       documents: {
+        // id tiebreaker: docs from one submission share an identical
+        // createdAt (same transaction), so createdAt alone leaves ties
+        // in non-deterministic order across queries.
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
         select: {
           id: true,
           type: true,
@@ -33,6 +39,14 @@ export default async function RegistrationDetailPage({
   });
 
   if (!registration) notFound();
+  const blacklistEntry = await prisma.blacklist.findFirst({
+    where: { email: registration.email },
+    select: { id: true, reason: true },
+  });
+
+  const expiredDocs = registration.documents.filter(
+    (d) => getExpiryStatus(d.expiryDate) === "EXPIRED",
+  );
 
   return (
     <div className="mx-auto max-w-3xl p-8">
@@ -66,6 +80,22 @@ export default async function RegistrationDetailPage({
         </span>
       </div>
 
+      {expiredDocs.length > 0 && (
+        <div className="border-destructive-border bg-destructive-muted text-destructive mb-6 flex items-start gap-3 rounded-lg border p-4 text-sm">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <div>
+            <p className="font-semibold">
+              {expiredDocs.length} expired document
+              {expiredDocs.length === 1 ? "" : "s"}
+            </p>
+            <p className="mt-0.5">
+              {expiredDocs.map((d) => d.type).join(", ")} — please request a
+              re-upload or re-verify with a new expiry date before approving.
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="border-border mb-6 grid grid-cols-2 gap-4 rounded-lg border p-4">
         <div>
           <p className="text-muted-foreground text-xs uppercase">Email</p>
@@ -89,6 +119,7 @@ export default async function RegistrationDetailPage({
           registration.documents.map((doc) => (
             <DocumentVerifyRow
               key={doc.id}
+              registrationStatus={registration.status}
               doc={{
                 id: doc.id,
                 type: doc.type,
@@ -102,6 +133,16 @@ export default async function RegistrationDetailPage({
         )}
       </div>
 
+      <div className="mb-6">
+        <BlacklistAction
+          registrationId={registration.id}
+          fullName={registration.fullName}
+          isBlacklisted={!!blacklistEntry}
+          blacklistId={blacklistEntry?.id}
+          blacklistReason={blacklistEntry?.reason}
+        />
+      </div>
+
       {registration.status === "REJECTED" && registration.rejectionReason && (
         <div className="border-destructive-border bg-destructive-muted text-destructive mb-6 rounded-lg border p-4 text-sm">
           <p className="mb-1 font-semibold">Rejection reason</p>
@@ -110,7 +151,15 @@ export default async function RegistrationDetailPage({
       )}
 
       {registration.status === "PENDING" && (
-        <RegistrationReviewActions registrationId={registration.id} />
+        <RegistrationReviewActions
+          registrationId={registration.id}
+          documents={registration.documents.map((d) => ({
+            id: d.id,
+            type: d.type,
+            expiryDate: d.expiryDate ? d.expiryDate.toISOString() : null,
+            isVerified: d.isVerified,
+          }))}
+        />
       )}
     </div>
   );

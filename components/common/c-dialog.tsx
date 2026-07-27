@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/dialog";
 
 import React from "react";
+import { cn } from "@/lib/utils";
 
 interface CustomDialogProps {
   trigger: React.ReactNode;
@@ -16,7 +17,7 @@ interface CustomDialogProps {
   children?: React.ReactNode;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
-  dialogContentWidth?: string
+  className?: string;
 }
 
 export default function CustomDialog({
@@ -26,12 +27,17 @@ export default function CustomDialog({
   children,
   open,
   onOpenChange,
-  dialogContentWidth = 'max-w-2xl',
+  className = "max-w-2xl",
 }: CustomDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
-      <DialogContent className={`${dialogContentWidth}!`}>
+      <DialogContent
+        className={cn(
+          "max-h-[90vh] w-[calc(100%-2rem)] overflow-y-auto sm:w-full",
+          className
+        )}
+      >
         {(title || description) && (
           <DialogHeader>
             {title && <DialogTitle>{title}</DialogTitle>}
