@@ -24,6 +24,7 @@ model Registration {
   users           users?             @relation(fields: [createdById], references: [id])
   Visit           Visit[]
   documents       documents[]
+  CheckEvent      CheckEvent[]
 
   @@unique([email, type])
 }
@@ -33,6 +34,7 @@ model Visit {
   registrationId  String
   purpose         String
   visitDate       DateTime
+  visitToken      String       @unique
   windowStart     DateTime
   windowEnd       DateTime
   authorizedZones String[]
@@ -41,6 +43,8 @@ model Visit {
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
   Registration    Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+
+  CheckEvent CheckEvent[]
 }
 
 model documents {
@@ -50,6 +54,7 @@ model documents {
   filePath       String
   expiryDate     DateTime?
   isVerified     Boolean      @default(false)
+  isActive       Boolean      @default(true)
   verifiedById   String?
   verifiedAt     DateTime?
   replacedAt     DateTime?
@@ -86,6 +91,123 @@ model Blacklist {
   @@index([email])
 }
 
+model CheckEvent {
+  id                    String      @id @default(cuid())
+  visitId               String
+  registrationId        String
+  checkInAt             DateTime    @default(now())
+  checkInBy             String
+  checkOutAt            DateTime?
+  checkOutBy            String?
+  zones                 String[]
+  status                CheckStatus @default(INSIDE)
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+  riskLevel             RiskLevel?
+  isOverride            Boolean     @default(false)
+  overrideJustification String?
+  overrideBy            String?
+
+  Visit        Visit        @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  Registration Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([registrationId])
+}
+
+model Notification {
+  id        String              @id @default(cuid())
+  type      NotificationType
+  title     String
+  message   String
+  channel   NotificationChannel @default(IN_APP)
+  createdAt DateTime            @default(now())
+
+  @@index([createdAt])
+}
+
+model NotificationRead {
+  id         String   @id @default(cuid())
+  userId     String   @unique
+  lastReadAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Zone {
+  id          String    @id @default(cuid())
+  name        String
+  description String?
+  riskLevel   RiskLevel @default(LOW)
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model EvacuationSnapshot {
+  id        String   @id @default("singleton")
+  data      Json
+  updatedAt DateTime @updatedAt
+}
+
+// FR-006 / BR-003 / NFR-007: immutable, hash-chained audit trail.
+// Each record's `hash` = SHA-256(prevHash + action + actor + target + metadata + createdAt),
+// and `prevHash` must equal the previous record's `hash` — so editing or
+// deleting any past row breaks every hash after it. Appends are serialized
+// via a Postgres advisory lock (see lib/audit-log.ts) so the chain can't
+// fork under concurrent writes. There is intentionally no update/delete
+// path anywhere in the codebase for this model — only `create`.
+model AuditLog {
+  id         String   @id @default(cuid())
+  action     String
+  actorId    String?
+  actorEmail String?
+  targetType String?
+  targetId   String?
+  // Stored as a pre-serialized JSON string (not the `Json`/jsonb type) on
+  // purpose: Postgres jsonb does not preserve key order on round-trip, so
+  // re-serializing a jsonb column for hash verification produces a
+  // different byte string than what was originally hashed, even with zero
+  // tampering. Storing the exact string we hashed sidesteps that entirely.
+  metadata   String
+  prevHash   String
+  hash       String   @unique
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([targetType, targetId])
+}
+
+enum CheckStatus {
+  INSIDE
+  CHECKED_OUT
+  OVERSTAY
+  DENIED
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum NotificationType {
+  REGISTRATION_APPROVED
+  REGISTRATION_REJECTED
+  BLACKLIST_ALERT
+  TELEGRAM_MESSAGE
+  DOCUMENT_EXPIRY
+  OVERSTAY_ALERT
+  VISIT_REQUEST
+}
+
+enum NotificationChannel {
+  IN_APP
+  TELEGRAM
+  EMAIL
+}
+
 enum ConsentStatus {
   ACTIVE
   REVOKED
@@ -114,6 +236,7 @@ enum Role {
   SECURITY_OPERATOR
   HSE_ADMIN
   HR_ADMIN
+  SYSTEM_ADMIN
 }
 
 enum VisitStatus {

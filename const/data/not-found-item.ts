@@ -10,7 +10,7 @@ export const NotFoundItems: NotFoundProps = {
       title: "Documentation",
       subtitle: "Dive in to learn all about our project",
       icon: Book,
-      href: "",
+      href: '/user-guidance',
     },
   ],
   backButtonText: "Go back",

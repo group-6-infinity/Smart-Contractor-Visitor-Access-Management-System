@@ -4,6 +4,8 @@ import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { sendTelegramMessage } from "@/lib/telegram";
 import { sendRegistrationEmail } from "@/lib/mailer";
+import { createNotification } from "@/lib/notifications";
+import { appendAuditLog } from "@/lib/audit-log";
 
 async function getStaffSession() {
   const cookieStore = await cookies();
@@ -83,6 +85,7 @@ export async function PATCH(
       email: true,
       type: true,
       trackingToken: true,
+      documents: { select: { type: true, isVerified: true } },
     },
   });
 
@@ -95,6 +98,20 @@ export async function PATCH(
       { message: "Registration already reviewed" },
       { status: 409 },
     );
+  }
+
+  if (action === "APPROVE") {
+    const unverified = registration.documents.filter((d) => !d.isVerified);
+    if (unverified.length > 0) {
+      return NextResponse.json(
+        {
+          message: `Verify all documents before approving: ${unverified
+            .map((d) => d.type)
+            .join(", ")}`,
+        },
+        { status: 409 },
+      );
+    }
   }
 
   const updated = await prisma.registration.update({
@@ -128,6 +145,37 @@ export async function PATCH(
     });
   } catch (emailErr) {
     console.error("[EMAIL] notify failed:", emailErr);
+  }
+
+  try {
+    await createNotification({
+      type:
+        action === "APPROVE"
+          ? "REGISTRATION_APPROVED"
+          : "REGISTRATION_REJECTED",
+      title: `Registration ${action === "APPROVE" ? "approved" : "rejected"}`,
+      message: `${updated.fullName} registration has been ${
+        action === "APPROVE" ? "approved" : "rejected"
+      } by ${session.email}`,
+    });
+  } catch (notifErr) {
+    console.error("[NOTIFICATION] create failed:", notifErr);
+  }
+
+  try {
+    await appendAuditLog({
+      action: action === "APPROVE" ? "REGISTRATION_APPROVED" : "REGISTRATION_REJECTED",
+      actorId: session.id,
+      actorEmail: session.email,
+      targetType: "Registration",
+      targetId: updated.id,
+      metadata: {
+        fullName: updated.fullName,
+        rejectionReason: updated.rejectionReason,
+      },
+    });
+  } catch (err) {
+    console.error("[AUDIT LOG] append failed", err);
   }
 
   return NextResponse.json({ registration: updated });

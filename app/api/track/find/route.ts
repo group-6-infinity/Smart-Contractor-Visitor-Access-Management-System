@@ -1,5 +1,6 @@
 import prisma from "@/lib/prisma"
 import { NextRequest, NextResponse } from "next/server"
+import { encryptToken } from "@/lib/token-crypto"
 
 export async function POST(req: NextRequest) {
   const { email } = await req.json()
@@ -26,5 +27,10 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  return NextResponse.json({ registrations })
+  return NextResponse.json({
+    registrations: registrations.map((r) => ({
+      ...r,
+      trackingToken: encryptToken(r.trackingToken),
+    })),
+  })
 }

@@ -823,11 +823,11 @@ export const siteConfig = {
 export type SiteConfig = typeof siteConfig;
 
 export default function Footer() {
-  // const tablet = useMediaQuery("(max-width: 1024px)");
+  const currentYear = new Date().getFullYear();
 
   return (
     <footer id="footer" className="w-full pb-0">
-      <div className="mx-auto flex max-w-5xl flex-col p-4 md:flex-row md:items-center md:justify-between">
+      {/* <div className="mx-auto flex max-w-5xl flex-col p-4 md:flex-row md:items-center md:justify-between">
         <div className="mx-0 flex max-w-xs flex-col items-start justify-start gap-y-5">
           <Link href="/" className="flex items-center gap-2">
             <Icons.logo className="size-8" />
@@ -869,25 +869,21 @@ export default function Footer() {
             ))}
           </div>
         </div>
-      </div>
-      {/* <div className="w-full h-48 md:h-64 relative mt-24 z-0">
-        <div className="absolute inset-0 bg-gradient-to-t from-transparent to-background z-10 from-40%" />
-        <div className="absolute inset-0 mx-6">
-          <FlickeringGrid
-            text={tablet ? "Footer" : "Streamline your workflow"}
-            fontSize={tablet ? 70 : 90}
-            className="h-full w-full"
-            squareSize={2}
-            gridGap={tablet ? 2 : 3}
-            color="#6B7280"
-            maxOpacity={0.3}
-            flickerChance={0.1}
-          />
-        </div>
       </div> */}
+
+      {/* Copyright bar — v1.0 */}
+      <div className="border-border mt-8 border-t">
+        <div className="text-muted-foreground mx-auto flex max-w-5xl flex-col items-center justify-between gap-2 px-4 py-6 text-sm sm:flex-row">
+          <p>
+            &copy; {currentYear} SecureGate&trade;. All rights reserved.
+          </p>
+          <p className="flex items-center gap-2">
+            <span>Version 1.0.0</span>
+            <span className="text-muted-foreground/50">·</span>
+            <span>Built by Group 6 | Infinity</span>
+          </p>
+        </div>
+      </div>
     </footer>
   );
 }
-
-// 1763832041
-// naii-istriku

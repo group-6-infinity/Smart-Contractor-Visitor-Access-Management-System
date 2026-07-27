@@ -18,7 +18,7 @@ async function getStaffSession() {
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const session = await getStaffSession();
   if (!session || !["HSE_ADMIN", "HR_ADMIN"].includes(session.role)) {
@@ -28,13 +28,45 @@ export async function PATCH(
   const { id } = await params;
   const { isVerified, expiryDate } = await req.json();
 
+  if (isVerified) {
+    if (!expiryDate) {
+      return NextResponse.json(
+        { message: "Expiry date is required to verify a document" },
+        { status: 400 },
+      );
+    }
+    const expiry = new Date(expiryDate);
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    if (expiry <= startOfToday) {
+      return NextResponse.json(
+        { message: "Expiry date must be a future date" },
+        { status: 400 },
+      );
+    }
+  }
+
   const document = await prisma.documents.findUnique({
     where: { id },
-    select: { id: true },
+    select: {
+      id: true,
+      Registration: { select: { status: true } },
+    },
   });
 
   if (!document) {
-    return NextResponse.json({ message: "Document not found" }, { status: 404 });
+    return NextResponse.json(
+      { message: "Document not found" },
+      { status: 404 },
+    );
+  }
+
+  if (document.Registration.status !== "PENDING") {
+    return NextResponse.json(
+      { message: "Cannot modify documents of a reviewed registration" },
+      { status: 403 },
+    );
   }
 
   const updated = await prisma.documents.update({
@@ -45,12 +77,7 @@ export async function PATCH(
       verifiedById: isVerified ? session.id : undefined,
       verifiedAt: isVerified ? new Date() : undefined,
     },
-    select: {
-      id: true,
-      type: true,
-      isVerified: true,
-      expiryDate: true,
-    },
+    select: { id: true, type: true, isVerified: true, expiryDate: true },
   });
 
   return NextResponse.json({ document: updated });
