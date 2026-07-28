@@ -56,7 +56,12 @@ export async function POST(req: NextRequest) {
           photoPath: true,
           documents: {
             where: { isActive: true },
-            select: { id: true, type: true, expiryDate: true, isVerified: true },
+            select: {
+              id: true,
+              type: true,
+              expiryDate: true,
+              isVerified: true,
+            },
           },
         },
       },
@@ -66,7 +71,7 @@ export async function POST(req: NextRequest) {
   if (!visit) {
     return NextResponse.json(
       { valid: false, message: "Invalid token" },
-      { status: 404 }
+      { status: 404 },
     );
   }
 
@@ -138,7 +143,7 @@ export async function POST(req: NextRequest) {
   const schedule = checkSchedule(
     visit.visitDate,
     visit.windowStart,
-    visit.windowEnd
+    visit.windowEnd,
   );
 
   // cek udah check-in belum (buat visit ini)
@@ -159,14 +164,22 @@ export async function POST(req: NextRequest) {
 
   const hasExpired = documents.some((d) => d.expiryStatus === "EXPIRED");
   const hasExpiringSoon = documents.some(
-    (d) => d.expiryStatus === "EXPIRING_SOON"
+    (d) => d.expiryStatus === "EXPIRING_SOON",
   );
 
+  // Zone.riskLevel travels alongside the name so the operator can see how
+  // hazardous the destination is at the moment they grant entry. It is a
+  // separate axis from `risk` below: that one scores the *person* (visit
+  // history, document compliance, blacklist status per FR-005), this one
+  // describes the *place*. Deliberately kept out of assessRisk() — folding
+  // them would make a clean-history contractor read as HIGH purely because of
+  // where they are headed, which is not what FR-005 specifies.
   const zones = await prisma.zone.findMany({
     where: { id: { in: visit.authorizedZones } },
-    select: { id: true, name: true },
+    select: { id: true, name: true, riskLevel: true },
   });
   const zoneNames = Object.fromEntries(zones.map((z) => [z.id, z.name]));
+  const zoneRisks = Object.fromEntries(zones.map((z) => [z.id, z.riskLevel]));
 
   return NextResponse.json({
     valid: true,
@@ -190,6 +203,7 @@ export async function POST(req: NextRequest) {
       windowEnd: visit.windowEnd.toISOString(),
       authorizedZones: visit.authorizedZones,
       zoneNames,
+      zoneRisks,
     },
     risk,
     documents,

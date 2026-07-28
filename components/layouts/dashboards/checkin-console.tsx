@@ -57,6 +57,7 @@ interface ValidateResult {
     windowEnd: string;
     authorizedZones: string[];
     zoneNames?: Record<string, string>;
+    zoneRisks?: Record<string, string>;
   };
   risk?: Risk;
   documents?: DocStatus[];
@@ -68,6 +69,15 @@ const RISK_STYLE: Record<string, string> = {
   LOW: "bg-success-muted text-success",
   MEDIUM: "bg-info-muted text-info",
   HIGH: "bg-destructive-muted text-destructive",
+};
+
+// Zone.riskLevel, not the person's risk score — separate axis, and it carries a
+// CRITICAL tier that assessRisk() never produces.
+const ZONE_RISK_STYLE: Record<string, string> = {
+  LOW: "border-success-border text-success bg-success-muted",
+  MEDIUM: "border-info-border text-info bg-info-muted",
+  HIGH: "border-destructive text-destructive bg-destructive-muted",
+  CRITICAL: "border-destructive bg-destructive text-white",
 };
 
 function formatReadableDate(iso: string) {
@@ -479,6 +489,7 @@ function ApprovedView({
 
   const scheduleBlocked = result.scheduleAllowed === false;
   const zoneNames = visit.zoneNames ?? {};
+  const zoneRisks = visit.zoneRisks ?? {};
 
   return (
     <div className="flex flex-col gap-5">
@@ -523,17 +534,30 @@ function ApprovedView({
             {formatTimeWIB(visit.windowEnd)}
           </span>
         </div>
-        <div className="flex items-center justify-between">
+        <div className="flex items-start justify-between">
           <span className="text-muted-foreground">ZONES</span>
           <div className="flex flex-wrap justify-end gap-2">
-            {visit.authorizedZones.map((z) => (
-              <span
-                key={z}
-                className="bg-success text-success-foreground rounded-full px-3 py-0.5 text-xs"
-              >
-                {zoneNames[z] ?? z}
-              </span>
-            ))}
+            {visit.authorizedZones.map((z) => {
+              const zoneRisk = zoneRisks[z];
+              return (
+                <span
+                  key={z}
+                  className="border-border flex items-center gap-1.5 rounded-full border py-0.5 pr-1 pl-3 text-xs"
+                >
+                  {zoneNames[z] ?? z}
+                  {zoneRisk && (
+                    <span
+                      className={cn(
+                        "rounded-full border px-1.5 py-0.5 text-[10px] font-semibold",
+                        ZONE_RISK_STYLE[zoneRisk],
+                      )}
+                    >
+                      {zoneRisk}
+                    </span>
+                  )}
+                </span>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -620,7 +644,11 @@ function ApprovedView({
           )}
         </div>
       ) : (
-        <Button variant="outline" onClick={onScanNext} className="cursor-pointer">
+        <Button
+          variant="outline"
+          onClick={onScanNext}
+          className="cursor-pointer"
+        >
           Scan Next
         </Button>
       )}
