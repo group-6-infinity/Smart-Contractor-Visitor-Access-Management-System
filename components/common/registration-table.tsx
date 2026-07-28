@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { ChevronRight, HardHat, Search, User } from "lucide-react";
+import { ChevronRight, HardHat, Search, ShieldBan, User } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 
@@ -13,7 +13,9 @@ interface RegistrationRow {
   type: "CONTRACTOR" | "VISITOR";
   fullName: string;
   company: string;
+  email: string;
   status: "PENDING" | "APPROVED" | "REJECTED";
+  isBlacklisted: boolean;
   createdAt: string;
 }
 
@@ -23,7 +25,9 @@ const STATUS_STYLE: Record<string, string> = {
   REJECTED: "border-destructive text-destructive bg-destructive-muted",
 };
 
-const TABS = ["ALL", "PENDING", "APPROVED", "REJECTED"] as const;
+// BLACKLISTED is a filter, not a status — it cuts across the other three,
+// since someone can be blacklisted while their registration sits in any state.
+const TABS = ["ALL", "PENDING", "APPROVED", "REJECTED", "BLACKLISTED"] as const;
 type Tab = (typeof TABS)[number];
 
 function formatDateUnused(iso: string) {
@@ -48,13 +52,18 @@ export default function RegistrationsTable({
       PENDING: initialRows.filter((r) => r.status === "PENDING").length,
       APPROVED: initialRows.filter((r) => r.status === "APPROVED").length,
       REJECTED: initialRows.filter((r) => r.status === "REJECTED").length,
+      BLACKLISTED: initialRows.filter((r) => r.isBlacklisted).length,
     }),
-    [initialRows]
+    [initialRows],
   );
 
   const filtered = useMemo(() => {
     const byTab =
-      tab === "ALL" ? initialRows : initialRows.filter((r) => r.status === tab);
+      tab === "ALL"
+        ? initialRows
+        : tab === "BLACKLISTED"
+          ? initialRows.filter((r) => r.isBlacklisted)
+          : initialRows.filter((r) => r.status === tab);
 
     const q = query.trim().toLowerCase();
     if (!q) return byTab;
@@ -62,6 +71,7 @@ export default function RegistrationsTable({
       (r) =>
         r.fullName.toLowerCase().includes(q) ||
         r.company.toLowerCase().includes(q) ||
+        r.email.toLowerCase().includes(q) ||
         r.trackingToken.toLowerCase().includes(q),
     );
   }, [tab, query, initialRows]);
@@ -85,10 +95,10 @@ export default function RegistrationsTable({
             onClick={() => setTab(t)}
             variant="ghost"
             className={cn(
-              "relative px-4 py-2 text-sm font-medium transition-colors cursor-pointer",
+              "relative cursor-pointer px-4 py-2 text-sm font-medium transition-colors",
               tab === t
                 ? "text-foreground"
-                : "text-muted-foreground hover:text-foreground"
+                : "text-muted-foreground hover:text-foreground",
             )}
           >
             {t.charAt(0) + t.slice(1).toLowerCase()}
@@ -122,7 +132,7 @@ export default function RegistrationsTable({
               href={`/staff/registrations/${r.id}`}
               className={cn(
                 "hover:bg-muted/40 grid grid-cols-[2fr_2fr_1fr_1.2fr_0.5fr] items-center gap-4 px-4 py-3 text-sm transition-colors",
-                i % 2 === 1 && "bg-muted/20"
+                i % 2 === 1 && "bg-muted/20",
               )}
             >
               <div>
@@ -131,7 +141,9 @@ export default function RegistrationsTable({
                   {r.trackingToken}
                 </p>
               </div>
-              <span className="text-muted-foreground truncate">{r.company}</span>
+              <span className="text-muted-foreground truncate">
+                {r.company}
+              </span>
               <span className="flex items-center gap-1.5 text-xs">
                 {r.type === "CONTRACTOR" ? (
                   <HardHat className="h-3.5 w-3.5" />
@@ -140,15 +152,24 @@ export default function RegistrationsTable({
                 )}
                 {r.type.charAt(0) + r.type.slice(1).toLowerCase()}
               </span>
-              <span>
+              <span className="flex flex-wrap items-center gap-1">
                 <span
                   className={cn(
                     "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium",
-                    STATUS_STYLE[r.status]
+                    STATUS_STYLE[r.status],
                   )}
                 >
                   {r.status}
                 </span>
+                {r.isBlacklisted && (
+                  <span
+                    title="This person is blacklisted — entry is denied at the gate and their registration cannot be approved."
+                    className="border-destructive text-destructive bg-destructive-muted inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium"
+                  >
+                    <ShieldBan className="h-3 w-3" />
+                    BLACKLISTED
+                  </span>
+                )}
               </span>
               <ChevronRight className="text-muted-foreground h-4 w-4 justify-self-end" />
             </Link>
