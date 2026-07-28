@@ -289,7 +289,7 @@ function ValidToken({
       ? "Your registration is being reviewed by our HSE team. One or more documents below need your attention before we can continue."
       : "Your registration is being reviewed by our HSE team. You'll receive an update right here no further action is needed for now.",
     REJECTED:
-      "You don't need to register again. Update the affected documents below and submit them — your registration goes straight back to our HSE team for review.",
+      "You don't need to register again. Update the affected documents below and submit them. Your registration goes straight back to our HSE team for review.",
   };
 
   const hasExpired = documents.some(
