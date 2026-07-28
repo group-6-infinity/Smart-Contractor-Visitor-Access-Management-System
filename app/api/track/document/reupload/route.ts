@@ -1,8 +1,9 @@
 import prisma from "@/lib/prisma";
-import { put } from "@vercel/blob";
+import { del, put } from "@vercel/blob";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { createNotification } from "@/lib/notifications";
+import { appendAuditLog } from "@/lib/audit-log";
 import { NotificationType } from "@/lib/generated/prisma/enums";
 
 const ALLOWED_MIME = ["image/jpeg", "image/png", "application/pdf"];
@@ -40,11 +41,24 @@ export async function POST(req: NextRequest) {
 
     const activeDocs = await prisma.documents.findMany({
       where: { registrationId: registration.id, isActive: true },
-      select: { id: true, type: true },
+      // newest first — picks the surviving row when legacy data left more
+      // than one row of a type active
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      select: { id: true, type: true, filePath: true },
     });
 
+    // Satu row per tipe. Iterasi per row bikin tiap row duplikat ketemu file
+    // yang sama, jadi tipe yang sudah telanjur dobel malah beranak lagi.
+    const docByType = new Map<
+      (typeof activeDocs)[number]["type"],
+      (typeof activeDocs)[number]
+    >();
+    for (const doc of activeDocs) {
+      if (!docByType.has(doc.type)) docByType.set(doc.type, doc);
+    }
+
     // batch: satu file per tipe dokumen aktif, dikirim sebagai formData.get(type)
-    const submissions = activeDocs
+    const submissions = [...docByType.values()]
       .map((doc) => ({ doc, file: form.get(doc.type) as File | null }))
       .filter((s): s is { doc: (typeof activeDocs)[number]; file: File } =>
         Boolean(s.file),
@@ -84,23 +98,37 @@ export async function POST(req: NextRequest) {
       }),
     );
 
-    // nonaktifkan dok lama + bikin dok baru (unverified) untuk seluruh batch,
-    // lalu SATU kali transisi registrasi ke PENDING untuk semuanya
+    // Replace in place: satu tipe dokumen = satu row, selamanya. Row-nya
+    // ditimpa (filePath baru, verifikasi direset ke nol) alih-alih di-retire
+    // lalu diganti row baru — versi lama bikin tabel numpuk dan tiap query
+    // yang lupa filter isActive menampilkan tipe yang sama berkali-kali.
+    // Jejaknya tetap ada: replacedAt di-stamp dan DOCUMENT_REPLACED masuk
+    // audit log dengan path file lamanya.
+    //
+    // updateMany kedua cuma buat data lama — kalau satu tipe telanjur punya
+    // lebih dari satu row aktif, sisanya ikut dinonaktifkan sekalian.
+    const now = new Date();
     const ops = uploads.flatMap(({ doc, blob }) => [
       prisma.documents.update({
         where: { id: doc.id },
-        data: { isActive: false, replacedAt: new Date() },
-      }),
-      prisma.documents.create({
         data: {
-          registrationId: registration.id,
-          type: doc.type,
           filePath: blob.pathname,
           isVerified: false,
-          isActive: true,
           expiryDate: null,
+          verifiedById: null,
+          verifiedAt: null,
+          replacedAt: now,
         },
         select: { id: true, type: true },
+      }),
+      prisma.documents.updateMany({
+        where: {
+          registrationId: registration.id,
+          type: doc.type,
+          isActive: true,
+          id: { not: doc.id },
+        },
+        data: { isActive: false, replacedAt: now },
       }),
     ]);
 
@@ -108,13 +136,51 @@ export async function POST(req: NextRequest) {
       ...ops,
       prisma.registration.update({
         where: { id: registration.id },
-        data: { status: "PENDING" },
+        // rejectionReason dikosongkan: registrasi yang tadinya REJECTED balik
+        // ke antrean review, jadi alasan penolakan lama tidak boleh ikut
+        // menempel di record yang statusnya sudah PENDING lagi.
+        data: { status: "PENDING", rejectionReason: null },
       }),
     ]);
 
-    const newDocs = results
+    const replacedDocs = results
       .slice(0, ops.length)
-      .filter((_, i) => i % 2 === 1) as { id: string; type: string }[];
+      .filter((_, i) => i % 2 === 0) as { id: string; type: string }[];
+
+    // Setelah commit: file lama sudah tidak direferensikan row mana pun, jadi
+    // hapus biar tidak jadi orphan di blob storage. Gagal hapus tidak
+    // membatalkan apa pun — dokumennya sendiri sudah tergantikan.
+    const stalePaths = uploads
+      .map(({ doc }) => doc.filePath)
+      .filter((path) => Boolean(path));
+    if (stalePaths.length > 0) {
+      void del(stalePaths).catch(() =>
+        console.error("[DOC RE-UPLOAD] stale blob cleanup failed", stalePaths),
+      );
+    }
+
+    // Isi dokumen berubah tanpa meninggalkan row lama, jadi penggantiannya
+    // dicatat di audit trail — itu satu-satunya tempat path file sebelumnya
+    // masih bisa dilacak.
+    try {
+      await appendAuditLog({
+        action: "DOCUMENT_REPLACED",
+        actorEmail: registration.email,
+        targetType: "Registration",
+        targetId: registration.id,
+        // flat keys with scalar/array-of-scalar values — the audit-log viewer
+        // renders nested objects as "[object Object]"
+        metadata: {
+          documentIds: uploads.map(({ doc }) => doc.id),
+          replacements: uploads.map(
+            ({ doc, blob }) =>
+              `${doc.type}: ${doc.filePath} → ${blob.pathname}`,
+          ),
+        },
+      });
+    } catch {
+      console.error("[AUDIT] reupload append failed");
+    }
 
     try {
       const types = uploads.map(({ doc }) => doc.type).join(", ");
@@ -130,7 +196,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         message: "Documents uploaded and submitted for review",
-        data: newDocs,
+        data: replacedDocs,
       },
       { status: 201 },
     );

@@ -39,6 +39,9 @@ export default async function VisitDetailPage({
           email: true,
           type: true,
           documents: {
+            // matches the visit API's own guard — superseded rows would
+            // otherwise list each replaced type twice
+            where: { isActive: true },
             select: {
               id: true,
               type: true,

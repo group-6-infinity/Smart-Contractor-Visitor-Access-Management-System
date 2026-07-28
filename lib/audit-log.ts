@@ -32,7 +32,10 @@ export type AuditAction =
   | "STAFF_UPDATED"
   | "ZONE_CREATED"
   | "ZONE_UPDATED"
-  | "VISIT_ZONES_UPDATED";
+  | "VISIT_ZONES_UPDATED"
+  // Re-upload overwrites the document row in place rather than superseding
+  // it, so this entry is the only surviving record of the previous file.
+  | "DOCUMENT_REPLACED";
 
 interface AppendAuditLogInput {
   action: AuditAction;
