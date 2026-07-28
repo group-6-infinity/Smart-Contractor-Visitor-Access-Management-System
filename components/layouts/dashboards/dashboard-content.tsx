@@ -282,7 +282,16 @@ export default function DashboardContent({
                         {r.fullName}
                       </p>
                       <p className="text-muted-foreground truncate text-xs">
-                        {r.company} · {relativeTime(r.createdAt)}
+                        {r.company} ·{" "}
+                        {/* relativeTime() reads Date.now(), so its output at
+                            SSR time and at hydration time can legitimately
+                            differ by however long the round trip took —
+                            that's expected, not a real mismatch, hence
+                            suppressHydrationWarning rather than fixing the
+                            "difference" itself. */}
+                        <span suppressHydrationWarning>
+                          {relativeTime(r.createdAt)}
+                        </span>
                       </p>
                     </div>
                     <span
