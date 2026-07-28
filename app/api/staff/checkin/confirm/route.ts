@@ -31,7 +31,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
 
-  const { token, override, justification } = await req.json();
+  const { token, override, justification, manualReviewAcknowledged } =
+    await req.json();
 
   const visit = await prisma.visit.findUnique({
     where: { visitToken: token },
@@ -65,14 +66,14 @@ export async function POST(req: NextRequest) {
         blocked: true,
         message: "ACCESS DENIED — Blacklisted. No override permitted.",
       },
-      { status: 403 }
+      { status: 403 },
     );
   }
 
   if (visit.status !== "APPROVED") {
     return NextResponse.json(
       { message: "Visit not approved" },
-      { status: 403 }
+      { status: 403 },
     );
   }
 
@@ -80,12 +81,12 @@ export async function POST(req: NextRequest) {
   const schedule = checkSchedule(
     visit.visitDate,
     visit.windowStart,
-    visit.windowEnd
+    visit.windowEnd,
   );
   if (!schedule.allowed) {
     return NextResponse.json(
       { message: schedule.reason ?? "Check-in not allowed at this time" },
-      { status: 422 }
+      { status: 422 },
     );
   }
 
@@ -95,7 +96,10 @@ export async function POST(req: NextRequest) {
     select: { id: true },
   });
   if (alreadyInside) {
-    return NextResponse.json({ message: "Already checked in" }, { status: 409 });
+    return NextResponse.json(
+      { message: "Already checked in" },
+      { status: 409 },
+    );
   }
 
   // dokumen expired → override. KTP/FACE_PHOTO (null) ga dihitung
@@ -113,18 +117,34 @@ export async function POST(req: NextRequest) {
         needsOverride: true,
         message: "Expired documents — manual override required",
       },
-      { status: 422 }
+      { status: 422 },
     );
   }
 
   if (override && !justification?.trim()) {
     return NextResponse.json(
       { message: "Justification is required for override" },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
   const risk = await assessRisk(registration.id);
+
+  // FR-005: a flagged manual review must be acknowledged before entry is
+  // granted. The console disables its buttons until the operator ticks the box,
+  // but the flag is re-evaluated here so the requirement holds for any caller —
+  // a client-side-only gate is not a gate.
+  if (risk.requiresManualReview && !manualReviewAcknowledged) {
+    return NextResponse.json(
+      {
+        needsManualReview: true,
+        reasons: risk.reasons,
+        message:
+          "Manual review required — the operator must acknowledge it before entry can be granted.",
+      },
+      { status: 422 },
+    );
+  }
 
   const checkEvent = await prisma.checkEvent.create({
     data: {
@@ -167,6 +187,13 @@ export async function POST(req: NextRequest) {
         riskLevel: risk.level,
         override: !!override,
         justification: override ? justification : null,
+        // FR-005: record that the operator actually acknowledged the manual
+        // review, not just that the flag was raised.
+        manualReviewRequired: risk.requiresManualReview,
+        manualReviewAcknowledged: risk.requiresManualReview
+          ? !!manualReviewAcknowledged
+          : null,
+        riskReasons: risk.reasons,
       },
     });
   } catch (err) {
@@ -183,6 +210,6 @@ export async function POST(req: NextRequest) {
         isOverride: !!override,
       },
     },
-    { status: 201 }
+    { status: 201 },
   );
 }

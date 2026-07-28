@@ -80,6 +80,9 @@ const ZONE_RISK_STYLE: Record<string, string> = {
   CRITICAL: "border-destructive bg-destructive text-white",
 };
 
+const MANUAL_REVIEW_HINT =
+  "Acknowledge the manual review above before granting entry.";
+
 function formatReadableDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-GB", {
     day: "numeric",
@@ -101,11 +104,19 @@ export default function CheckinConsole() {
   const [denyOpen, setDenyOpen] = useState(false);
   const [denyReason, setDenyReason] = useState("");
 
+  // FR-005: when the risk engine raises requiresManualReview, the operator must
+  // acknowledge it before entry can be granted. Held here rather than inside
+  // ApprovedView because that component stays mounted between scans — local
+  // state would carry one person's acknowledgement over to the next person
+  // scanned, which is exactly what this gate exists to prevent.
+  const [reviewAcknowledged, setReviewAcknowledged] = useState(false);
+
   async function handleValidate() {
     if (!token.trim()) return;
     setLoading(true);
     setError(null);
     setResult(null);
+    setReviewAcknowledged(false);
     try {
       const res = await fetch("/api/staff/checkin/validate", {
         method: "POST",
@@ -130,6 +141,7 @@ export default function CheckinConsole() {
     setLoading(true);
     setError(null);
     setResult(null);
+    setReviewAcknowledged(false);
     try {
       const res = await fetch("/api/staff/checkin/validate", {
         method: "POST",
@@ -160,6 +172,7 @@ export default function CheckinConsole() {
           token: token.trim(),
           override,
           justification: override ? justification : undefined,
+          manualReviewAcknowledged: reviewAcknowledged,
         }),
       });
       const data = await res.json();
@@ -208,6 +221,7 @@ export default function CheckinConsole() {
     setError(null);
     setJustification("");
     setDenyReason("");
+    setReviewAcknowledged(false);
   }
 
   return (
@@ -327,6 +341,8 @@ export default function CheckinConsole() {
             <ApprovedView
               result={result}
               loading={loading}
+              reviewAcknowledged={reviewAcknowledged}
+              onAcknowledgeChange={setReviewAcknowledged}
               onGrant={() => handleCheckin(false)}
               onOverride={() => setOverrideOpen(true)}
               onDeny={() => setDenyOpen(true)}
@@ -471,6 +487,8 @@ function BlacklistedView({
 function ApprovedView({
   result,
   loading,
+  reviewAcknowledged,
+  onAcknowledgeChange,
   onGrant,
   onOverride,
   onDeny,
@@ -478,6 +496,8 @@ function ApprovedView({
 }: {
   result: ValidateResult;
   loading: boolean;
+  reviewAcknowledged: boolean;
+  onAcknowledgeChange: (value: boolean) => void;
   onGrant: () => void;
   onOverride: () => void;
   onDeny: () => void;
@@ -490,6 +510,8 @@ function ApprovedView({
   const scheduleBlocked = result.scheduleAllowed === false;
   const zoneNames = visit.zoneNames ?? {};
   const zoneRisks = visit.zoneRisks ?? {};
+  // FR-005: entry stays blocked while a manual review is flagged but unconfirmed
+  const reviewBlocked = risk.requiresManualReview && !reviewAcknowledged;
 
   return (
     <div className="flex flex-col gap-5">
@@ -595,9 +617,25 @@ function ApprovedView({
       )}
 
       {risk.requiresManualReview && (
-        <div className="border-primary/40 text-muted-foreground rounded-lg border border-dashed p-3 text-sm">
-          {risk.isFirstVisit ? "First Visit · " : ""}
-          Manual Review Required {risk.reasons.join(", ")}
+        <div className="border-primary/40 rounded-lg border border-dashed p-3 text-sm">
+          <p className="text-muted-foreground">
+            {risk.isFirstVisit ? "First Visit · " : ""}
+            Manual Review Required {risk.reasons.join(", ")}
+          </p>
+          {/* FR-005 requires the operator to acknowledge this before entry is
+              granted, so the action buttons below stay disabled until it is
+              ticked. */}
+          <label className="text-foreground mt-2 flex cursor-pointer items-start gap-2 font-medium">
+            <input
+              type="checkbox"
+              checked={reviewAcknowledged}
+              onChange={(e) => onAcknowledgeChange(e.target.checked)}
+              disabled={loading}
+              className="accent-primary mt-0.5 h-4 w-4 shrink-0 cursor-pointer"
+            />
+            I have reviewed this person manually and take responsibility for
+            granting entry.
+          </label>
         </div>
       )}
 
@@ -628,16 +666,18 @@ function ApprovedView({
           {needsOverride ? (
             <Button
               onClick={onOverride}
-              disabled={loading || scheduleBlocked}
-              className="flex-1 cursor-pointer font-semibold disabled:opacity-50"
+              disabled={loading || scheduleBlocked || reviewBlocked}
+              title={reviewBlocked ? MANUAL_REVIEW_HINT : undefined}
+              className="flex-1 cursor-pointer font-semibold disabled:cursor-not-allowed disabled:opacity-50"
             >
               Override &amp; Grant Entry
             </Button>
           ) : (
             <Button
               onClick={onGrant}
-              disabled={loading || scheduleBlocked}
-              className="flex-1 cursor-pointer font-semibold disabled:opacity-50"
+              disabled={loading || scheduleBlocked || reviewBlocked}
+              title={reviewBlocked ? MANUAL_REVIEW_HINT : undefined}
+              className="flex-1 cursor-pointer font-semibold disabled:cursor-not-allowed disabled:opacity-50"
             >
               {loading ? "Processing..." : "Grant Entry"}
             </Button>
