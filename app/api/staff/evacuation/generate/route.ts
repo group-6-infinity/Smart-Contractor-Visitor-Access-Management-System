@@ -9,7 +9,7 @@ import {
   readSnapshot,
   type EvacuationPerson,
 } from "@/lib/evacuation-snapshot";
-import { formatTimeWIB } from "@/lib/datetime";
+import { formatTimeWIB, formatTimestampWIB } from "@/lib/datetime";
 
 async function getStaffSession() {
   const cookieStore = await cookies();
@@ -60,7 +60,7 @@ async function buildPdf(
     color: gray,
   });
   y -= 20;
-  page.drawText(`Generated: ${generatedAt.toLocaleString("id-ID")}`, {
+  page.drawText(`Generated: ${formatTimestampWIB(generatedAt)} WIB`, {
     x: margin,
     y,
     size: 9,
@@ -71,7 +71,7 @@ async function buildPdf(
 
   if (isFallback && snapshotTime) {
     page.drawText(
-      `FALLBACK SNAPSHOT — last updated ${snapshotTime.toLocaleString("id-ID")} (live data unavailable)`,
+      `FALLBACK SNAPSHOT — last updated ${formatTimestampWIB(snapshotTime)} WIB (live data unavailable)`,
       { x: margin, y, size: 9, font: fontBold, color: red },
     );
     y -= 14;

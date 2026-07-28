@@ -35,6 +35,7 @@ export async function GET(
     where: { id },
     include: {
       documents: {
+        where: { isActive: true },
         select: {
           id: true,
           type: true,
@@ -85,7 +86,13 @@ export async function PATCH(
       email: true,
       type: true,
       trackingToken: true,
-      documents: { select: { type: true, isVerified: true } },
+      // isActive only: a superseded row keeps its old isVerified value, so
+      // without the filter a document replaced while still unverified would
+      // block approval forever, even after the replacement is verified.
+      documents: {
+        where: { isActive: true },
+        select: { type: true, isVerified: true },
+      },
     },
   });
 

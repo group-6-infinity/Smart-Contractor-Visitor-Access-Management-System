@@ -16,6 +16,7 @@ import VisitSection from "@/components/sections/visit-section";
 import AuthLayout from "@/components/layouts/auth/auth-layout";
 import DocumentBatchReupload from "@/components/common/document-batch-reupload";
 import { decryptToken, encryptToken } from "@/lib/token-crypto";
+import { getExpiryStatus } from "@/lib/document-status";
 
 export default async function TrackingStatusPage({
   params,
@@ -125,18 +126,6 @@ interface VisitData {
   CheckEvent: CheckEventData[];
 }
 
-function getExpiryStatus(expiryDate: Date | null): string {
-  if (!expiryDate) return "NO_EXPIRY";
-  const now = new Date();
-  now.setHours(0, 0, 0, 0);
-  const diff = Math.ceil(
-    (new Date(expiryDate).getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
-  );
-  if (diff < 0) return "EXPIRED";
-  if (diff <= 30) return "EXPIRING_SOON";
-  return "VALID";
-}
-
 function formatReadableDate(date: Date) {
   return new Date(date).toLocaleDateString("en-GB", {
     day: "numeric",
@@ -148,7 +137,17 @@ function formatReadableDate(date: Date) {
 // Butuh update kalau expired/expiring, atau kalau belum verified tapi dokumen
 // lain di registrasi yang sama sudah verified (artinya ini sudah direview dan
 // ditolak staff, bukan sekadar belum sempat dicek).
-function isEligibleForUpdate(doc: DocData, allDocs: DocData[]): boolean {
+//
+// Registrasi REJECTED: semua dokumen boleh diganti. Alasan penolakan ditulis
+// bebas oleh HSE dan tidak terikat ke dokumen tertentu, jadi tidak ada cara
+// menebak mana yang bermasalah — mengunci sebagian bikin pemohon mentok tanpa
+// jalan keluar selain daftar ulang dari nol.
+function isEligibleForUpdate(
+  doc: DocData,
+  allDocs: DocData[],
+  registrationStatus: string,
+): boolean {
+  if (registrationStatus === "REJECTED") return true;
   const status = getExpiryStatus(doc.expiryDate);
   if (status === "EXPIRED" || status === "EXPIRING_SOON") return true;
   if (doc.isVerified) return false;
@@ -158,9 +157,11 @@ function isEligibleForUpdate(doc: DocData, allDocs: DocData[]): boolean {
 function DocumentStatus({
   documents,
   token,
+  registrationStatus,
 }: {
   documents: DocData[];
   token: string;
+  registrationStatus: string;
 }) {
   if (documents.length === 0) {
     return (
@@ -176,7 +177,7 @@ function DocumentStatus({
   }
 
   const eligibleForUpdate = documents.filter((doc) =>
-    isEligibleForUpdate(doc, documents),
+    isEligibleForUpdate(doc, documents, registrationStatus),
   );
 
   return (
@@ -280,13 +281,15 @@ function ValidToken({
   const { fullName, company, status, rejectionReason, documents, Visit } = data;
 
   const needsAttention = documents.some((d) =>
-    isEligibleForUpdate(d, documents),
+    isEligibleForUpdate(d, documents, status),
   );
 
   const messages: Record<string, string> = {
     PENDING: needsAttention
       ? "Your registration is being reviewed by our HSE team. One or more documents below need your attention before we can continue."
       : "Your registration is being reviewed by our HSE team. You'll receive an update right here no further action is needed for now.",
+    REJECTED:
+      "You don't need to register again. Update the affected documents below and submit them — your registration goes straight back to our HSE team for review.",
   };
 
   const hasExpired = documents.some(
@@ -335,12 +338,25 @@ function ValidToken({
         <InformationCard message={messages["PENDING"]} />
       )}
 
-      {(status === "PENDING" || status === "APPROVED") && (
+      {status === "REJECTED" && (
+        <InformationCard message={messages["REJECTED"]} />
+      )}
+
+      {/* REJECTED ikut di sini: mengganti dokumen mengembalikan registrasi ke
+          antrean review, jadi pemohon tidak perlu mengulang dari formulir
+          kosong hanya karena satu berkas ditolak. */}
+      {(status === "PENDING" ||
+        status === "APPROVED" ||
+        status === "REJECTED") && (
         <>
-          <DocumentStatus documents={documents} token={tokenUrl} />
+          <DocumentStatus
+            documents={documents}
+            token={tokenUrl}
+            registrationStatus={status}
+          />
 
           {/* Warning kalau ada dokumen expired */}
-          {hasExpired && (
+          {hasExpired && status !== "REJECTED" && (
             <div className="border-destructive-border bg-destructive-muted text-destructive w-full rounded-md border p-4 text-sm">
               <p className="font-semibold">Action required</p>
               <p className="mt-1">

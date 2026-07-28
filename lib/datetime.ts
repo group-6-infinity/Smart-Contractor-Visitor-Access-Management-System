@@ -36,6 +36,19 @@ export function formatDateTimeWIB(date: Date | string): string {
   });
 }
 
+// versi lengkap + detik, buat timestamp dokumen (PDF evacuation list dsb)
+export function formatTimestampWIB(date: Date | string): string {
+  return new Date(date).toLocaleString("id-ID", {
+    timeZone: TZ,
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
 export function toWIBDateKey(date: Date | string): string {
   return new Date(date).toLocaleDateString("en-CA", { timeZone: TZ });
 }

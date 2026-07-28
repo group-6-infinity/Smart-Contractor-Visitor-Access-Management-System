@@ -17,6 +17,7 @@ const ACTION_LABEL: Record<string, string> = {
   BLACKLIST_REMOVED: "Blacklist removed",
   STAFF_CREATED: "Staff account created",
   STAFF_UPDATED: "Staff account updated",
+  DOCUMENT_REPLACED: "Document re-uploaded",
 };
 
 // "fullName" -> "Full name", "isActive" -> "Is active"

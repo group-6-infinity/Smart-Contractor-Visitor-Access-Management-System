@@ -1,4 +1,4 @@
-  // lib/document-status.ts
+// lib/document-status.ts
 export function formatReadableDate(date: Date | string): string {
   const d = typeof date === "string" ? new Date(date) : date;
   return d.toLocaleDateString("en-GB", {
@@ -8,29 +8,38 @@ export function formatReadableDate(date: Date | string): string {
   });
 }
 
-export type DocExpiryStatus = "VALID" | "EXPIRING_SOON" | "EXPIRED" | "NO_EXPIRY";
-const EXPIRING_SOON_DAYS = 30;
+export type DocExpiryStatus =
+  "VALID" | "EXPIRING_SOON" | "EXPIRED" | "NO_EXPIRY";
+const EXPIRING_SOON_DAYS = 7;
 
 export function getExpiryStatus(
-  expiryDate: Date | string | null
+  expiryDate: Date | string | null,
 ): DocExpiryStatus {
   if (!expiryDate) return "NO_EXPIRY";
 
-  const expiry = typeof expiryDate === "string" ? new Date(expiryDate) : expiryDate;
+  const expiry =
+    typeof expiryDate === "string" ? new Date(expiryDate) : expiryDate;
   const now = new Date();
   now.setHours(0, 0, 0, 0);
 
   const diffMs = expiry.getTime() - now.getTime();
   const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
 
-  if (diffDays < 0) return "EXPIRED";
+  // <= 0, bukan < 0: expiryDate hari ini berarti dokumennya sudah tidak
+  // berlaku lagi hari ini, bukan "0 hari lagi". Sebelumnya expiryDate = hari
+  // ini lolos sebagai EXPIRING_SOON dengan label "0 days left", padahal
+  // seharusnya sudah EXPIRED.
+  if (diffDays <= 0) return "EXPIRED";
   if (diffDays <= EXPIRING_SOON_DAYS) return "EXPIRING_SOON";
   return "VALID";
 }
 
-export function daysUntilExpiry(expiryDate: Date | string | null): number | null {
+export function daysUntilExpiry(
+  expiryDate: Date | string | null,
+): number | null {
   if (!expiryDate) return null;
-  const expiry = typeof expiryDate === "string" ? new Date(expiryDate) : expiryDate;
+  const expiry =
+    typeof expiryDate === "string" ? new Date(expiryDate) : expiryDate;
   const now = new Date();
   now.setHours(0, 0, 0, 0);
   const diffMs = expiry.getTime() - now.getTime();
@@ -39,7 +48,7 @@ export function daysUntilExpiry(expiryDate: Date | string | null): number | null
 
 export function getStatusLabel(
   expiryDate: Date | string | null,
-  isVerified: boolean
+  isVerified: boolean,
 ): string {
   const status = getExpiryStatus(expiryDate);
   const verifiedPrefix = isVerified ? "Verified" : "Unverified";

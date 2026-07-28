@@ -24,6 +24,10 @@ export default async function RegistrationDetailPage({
     where: { id },
     include: {
       documents: {
+        // Replaced documents stay in the table for audit history — without
+        // this filter a re-upload makes its type show up twice, and the
+        // superseded row keeps driving expiredDocs and the approve guard.
+        where: { isActive: true },
         // id tiebreaker: docs from one submission share an identical
         // createdAt (same transaction), so createdAt alone leaves ties
         // in non-deterministic order across queries.

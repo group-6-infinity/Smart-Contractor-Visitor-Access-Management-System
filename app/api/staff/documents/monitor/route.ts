@@ -2,6 +2,7 @@ import prisma from "@/lib/prisma";
 import { jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
+import { daysUntilExpiry, getExpiryStatus } from "@/lib/document-status";
 
 async function getStaffSession() {
   const cookieStore = await cookies();
@@ -41,22 +42,15 @@ export async function GET(req: NextRequest) {
     },
   });
 
-  const now = new Date();
-  now.setHours(0, 0, 0, 0);
-
+  // status pakai getExpiryStatus/daysUntilExpiry dari lib/document-status —
+  // dulu logika ini ditulis ulang inline di sini dengan angka ambang sendiri
+  // (30 hari) yang beda dari implementasi lain, jadi status dokumen yang
+  // sama bisa tampil beda di halaman berbeda. "REVIEW" tetap override lokal:
+  // dokumen yang belum diverifikasi HSE ditandai perlu-review terlepas dari
+  // tanggal expiry-nya (yang expiryDate-nya sendiri masih null/kosong).
   const enriched = docs.map((d) => {
-    const days = d.expiryDate
-      ? Math.ceil(
-          (new Date(d.expiryDate).getTime() - now.getTime()) /
-            (1000 * 60 * 60 * 24)
-        )
-      : null;
-    let status: string;
-    if (!d.isVerified) status = "REVIEW";
-    else if (days === null) status = "NO_EXPIRY";
-    else if (days < 0) status = "EXPIRED";
-    else if (days <= 30) status = "EXPIRING_SOON";
-    else status = "VALID";
+    const days = daysUntilExpiry(d.expiryDate);
+    const status = !d.isVerified ? "REVIEW" : getExpiryStatus(d.expiryDate);
 
     return {
       id: d.id,
@@ -71,25 +65,27 @@ export async function GET(req: NextRequest) {
     };
   });
 
+  // Dua tingkat urgensi: "expiring7" (window EXPIRING_SOON penuh, ≤7 hari)
+  // dan "expiring1" (irisan paling mendesak, ≤1 hari) — sebelumnya 30d/7d.
+  // daysLeft <= 0 sudah masuk status EXPIRED (lihat getExpiryStatus), jadi
+  // tidak tumpang tindih dengan dua bucket ini.
   const summary = {
-    expiring30: enriched.filter(
-      (d) => d.daysLeft !== null && d.daysLeft >= 0 && d.daysLeft <= 30
-    ).length,
-    expiring7: enriched.filter(
-      (d) => d.daysLeft !== null && d.daysLeft >= 0 && d.daysLeft <= 7
+    expiring7: enriched.filter((d) => d.status === "EXPIRING_SOON").length,
+    expiring1: enriched.filter(
+      (d) =>
+        d.status === "EXPIRING_SOON" && d.daysLeft !== null && d.daysLeft <= 1,
     ).length,
     expired: enriched.filter((d) => d.status === "EXPIRED").length,
     review: enriched.filter((d) => d.status === "REVIEW").length,
   };
 
   let filtered = enriched;
-  if (filter === "expiring30")
+  if (filter === "expiring7")
+    filtered = enriched.filter((d) => d.status === "EXPIRING_SOON");
+  else if (filter === "expiring1")
     filtered = enriched.filter(
-      (d) => d.daysLeft !== null && d.daysLeft >= 0 && d.daysLeft <= 30
-    );
-  else if (filter === "expiring7")
-    filtered = enriched.filter(
-      (d) => d.daysLeft !== null && d.daysLeft >= 0 && d.daysLeft <= 7
+      (d) =>
+        d.status === "EXPIRING_SOON" && d.daysLeft !== null && d.daysLeft <= 1,
     );
   else if (filter === "expired")
     filtered = enriched.filter((d) => d.status === "EXPIRED");
