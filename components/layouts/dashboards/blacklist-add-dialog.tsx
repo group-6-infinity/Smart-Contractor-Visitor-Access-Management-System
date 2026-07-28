@@ -118,7 +118,7 @@ export default function BlacklistAddDialog({
           <>
             <p className="text-muted-foreground text-sm">
               Search by name, email, or company. You can only blacklist a person
-              who has an existing registration this confirms their identity
+              who has an existing registration. That confirms their identity
               against their submitted documents.
             </p>
             <div className="relative">
@@ -180,8 +180,14 @@ export default function BlacklistAddDialog({
 
             <p className="text-muted-foreground text-sm">
               You are about to blacklist <strong>{selected.fullName}</strong>.
-              They will be automatically denied at check-in. Please provide a
-              reason.
+              They will be automatically denied at check-in with no operator
+              override, and cannot submit a new registration.
+            </p>
+            <p className="text-muted-foreground text-sm">
+              Any of their registrations still pending or approved will be{" "}
+              <strong>rejected automatically</strong> — including a second
+              registration of the other type, if they have one. Open visit
+              requests are cancelled along with them.
             </p>
 
             <textarea

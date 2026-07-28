@@ -109,7 +109,7 @@ export default function BlacklistAction({
         <Button
           size="lg"
           variant="outline"
-          className="py-6 text-destructive hover:bg-destructive-muted w-full cursor-pointer"
+          className="text-destructive hover:bg-destructive-muted w-full cursor-pointer py-6"
         >
           <ShieldX className="mr-1 h-4 w-4" />
           Blacklist this person
@@ -119,7 +119,14 @@ export default function BlacklistAction({
       <div className="space-y-4">
         <p className="text-muted-foreground text-sm">
           You are about to blacklist <strong>{fullName}</strong>. They will be
-          automatically denied at check-in. Please provide a reason.
+          automatically denied at check-in with no operator override, and cannot
+          submit a new registration.
+        </p>
+        <p className="text-muted-foreground text-sm">
+          Any of their registrations still pending or approved will be{" "}
+          <strong>rejected automatically</strong> — including a second
+          registration of the other type, if they have one. Open visit requests
+          are cancelled along with them.
         </p>
 
         <textarea
@@ -151,7 +158,7 @@ export default function BlacklistAction({
           <Button
             onClick={handleBlacklist}
             disabled={loading || !reason.trim()}
-            className="bg-destructive cursor-pointer text-white hover:bg-destructive/90 disabled:cursor-not-allowed disabled:opacity-50"
+            className="bg-destructive hover:bg-destructive/90 cursor-pointer text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
             {loading ? "Blacklisting..." : "Confirm blacklist"}
           </Button>

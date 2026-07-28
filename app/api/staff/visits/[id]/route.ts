@@ -4,6 +4,7 @@ import { jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { appendAuditLog } from "@/lib/audit-log";
+import { isBlacklisted } from "@/lib/blacklist";
 
 async function getStaffSession() {
   const cookieStore = await cookies();
@@ -163,6 +164,19 @@ export async function PATCH(
 
   // Guard approve: semua dokumen aktif harus VERIFIED dan punya expiry yang valid.
   if (action === "APPROVE") {
+    // Blacklist dicek lebih dulu: approve visit mengirim email berisi QR code
+    // ke pemohon, jadi tanpa guard ini orang yang sudah dicekal tetap menerima
+    // kredensial masuk yang kelihatan sah — meski gerbang nanti menolaknya.
+    const blocked = await isBlacklisted({ email: visit.Registration.email });
+    if (blocked.blocked) {
+      return NextResponse.json(
+        {
+          message: `${visit.Registration.fullName} is blacklisted — this visit cannot be approved. Remove the blacklist entry first if this is a mistake.`,
+        },
+        { status: 409 },
+      );
+    }
+
     const docs = visit.Registration.documents;
     const unverified = docs.filter((d) => !d.isVerified);
     if (unverified.length > 0) {
@@ -177,7 +191,8 @@ export async function PATCH(
     }
     // dokumen verified tapi expiry-nya null / lewat → block juga
     const invalidExpiry = docs.filter(
-      (d) => d.isVerified && (!d.expiryDate || new Date(d.expiryDate) < new Date()),
+      (d) =>
+        d.isVerified && (!d.expiryDate || new Date(d.expiryDate) < new Date()),
     );
     if (invalidExpiry.length > 0) {
       return NextResponse.json(

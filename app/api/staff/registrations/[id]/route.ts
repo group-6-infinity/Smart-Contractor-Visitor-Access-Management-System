@@ -6,6 +6,7 @@ import { sendTelegramMessage } from "@/lib/telegram";
 import { sendRegistrationEmail } from "@/lib/mailer";
 import { createNotification } from "@/lib/notifications";
 import { appendAuditLog } from "@/lib/audit-log";
+import { isBlacklisted } from "@/lib/blacklist";
 
 async function getStaffSession() {
   const cookieStore = await cookies();
@@ -108,6 +109,23 @@ export async function PATCH(
   }
 
   if (action === "APPROVE") {
+    // Blacklist is a property of the person, so it never shows up in this
+    // registration's status. The detail page renders a banner, but nothing
+    // stopped a reviewer working quickly from approving anyway — and an
+    // approved registration is what unlocks visit requests.
+    const blocked = await isBlacklisted({
+      email: registration.email,
+      registrationId: registration.id,
+    });
+    if (blocked.blocked) {
+      return NextResponse.json(
+        {
+          message: `${registration.fullName} is blacklisted and cannot be approved. Remove the blacklist entry first if this is a mistake.`,
+        },
+        { status: 409 },
+      );
+    }
+
     const unverified = registration.documents.filter((d) => !d.isVerified);
     if (unverified.length > 0) {
       return NextResponse.json(
@@ -171,7 +189,10 @@ export async function PATCH(
 
   try {
     await appendAuditLog({
-      action: action === "APPROVE" ? "REGISTRATION_APPROVED" : "REGISTRATION_REJECTED",
+      action:
+        action === "APPROVE"
+          ? "REGISTRATION_APPROVED"
+          : "REGISTRATION_REJECTED",
       actorId: session.id,
       actorEmail: session.email,
       targetType: "Registration",
