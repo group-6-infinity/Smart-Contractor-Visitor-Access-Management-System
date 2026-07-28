@@ -9,14 +9,30 @@ export default async function RegistrationsPage() {
       type: true,
       fullName: true,
       company: true,
+      email: true,
       status: true,
       createdAt: true,
     },
     orderBy: { createdAt: "desc" },
   });
 
+  // Blacklist is keyed on the person, not the registration, so it never shows
+  // up in `status` — a blacklisted applicant still reads as REJECTED (or even
+  // PENDING, if they were blacklisted while under review). Without a marker
+  // here a reviewer scanning the queue has no way to tell, and would only find
+  // out after opening the detail page.
+  const blacklistedEmails = new Set(
+    (
+      await prisma.blacklist.findMany({
+        where: { email: { in: registrations.map((r) => r.email) } },
+        select: { email: true },
+      })
+    ).map((b) => b.email),
+  );
+
   const rows = registrations.map((r) => ({
     ...r,
+    isBlacklisted: blacklistedEmails.has(r.email),
     createdAt: r.createdAt.toISOString(),
   }));
 
