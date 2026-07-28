@@ -6,6 +6,7 @@ import {
 } from "@/lib/generated/prisma/enums";
 import { sendRegistrationEmail } from "@/lib/mailer";
 import prisma from "@/lib/prisma";
+import { isBlacklisted } from "@/lib/blacklist";
 import { sendTelegramMessage } from "@/lib/telegram";
 import { del, put } from "@vercel/blob";
 import { nanoid } from "nanoid";
@@ -99,6 +100,17 @@ export async function POST(req: NextRequest) {
     }
 
     const normalizedEmail = email.toLowerCase();
+
+    const blocked = await isBlacklisted({ email: normalizedEmail });
+    if (blocked.blocked) {
+      return NextResponse.json(
+        {
+          message:
+            "This email is not eligible to register. Please contact our HSE team for more information.",
+        },
+        { status: 403 },
+      );
+    }
 
     const existing = await prisma.registration.findFirst({
       where: {

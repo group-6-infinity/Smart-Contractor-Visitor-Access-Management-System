@@ -23,9 +23,25 @@ export async function GET(req: NextRequest) {
   }
 
   const status = req.nextUrl.searchParams.get("status");
+  const q = req.nextUrl.searchParams.get("q")?.trim();
 
+  // "q" backs the registration picker in the blacklist-add flow (see
+  // blacklist-add-dialog.tsx) — blacklist entries must be created from a
+  // verified registration, never a free-typed name/email, so staff search
+  // here instead of typing an identity by hand.
   const registrations = await prisma.registration.findMany({
-    where: status ? { status: status as never } : undefined,
+    where: {
+      status: status ? (status as never) : undefined,
+      ...(q
+        ? {
+            OR: [
+              { fullName: { contains: q, mode: "insensitive" } },
+              { email: { contains: q, mode: "insensitive" } },
+              { company: { contains: q, mode: "insensitive" } },
+            ],
+          }
+        : {}),
+    },
     select: {
       id: true,
       trackingToken: true,
@@ -38,6 +54,7 @@ export async function GET(req: NextRequest) {
       createdAt: true,
     },
     orderBy: { createdAt: "desc" },
+    take: q ? 20 : undefined,
   });
 
   return NextResponse.json({ registrations });

@@ -20,8 +20,10 @@ export default async function BlacklistPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-semibold">Blacklist</h1>
         <p className="text-muted-foreground text-sm">
-          People blocked from entering. They are automatically denied at
-          check-in. To blacklist someone, open their registration detail.
+          Facility-wide entry block, managed here. Anyone on this list is
+          automatically denied at check-in with no operator override available,
+          and cannot submit a new registration. Separate from rejecting a
+          registration, which only closes that one application.
         </p>
       </div>
 
