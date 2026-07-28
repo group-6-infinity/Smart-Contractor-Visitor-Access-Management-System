@@ -9,19 +9,7 @@ import { RegistrationItem } from "@/const/interfaces/reg-prop.inteface";
 import { statusConfig, typeConfig } from "@/const/data/status-config-item";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-
-// Lets "Back to tracking search" from the detail page skip re-entering
-// the email, without turning it into a permanent bypass — the cached
-// result list expires after CACHE_TTL_MS and sessionStorage itself is
-// cleared once the tab closes.
-const CACHE_KEY = "track-status-search-cache";
-const CACHE_TTL_MS = 10 * 60 * 1000;
-
-interface SearchCache {
-  email: string;
-  registrations: RegistrationItem[];
-  timestamp: number;
-}
+import { clearTrackSessions } from "./actions";
 
 export default function TrackStatusPage() {
   const [email, setEmail] = useState("");
@@ -32,30 +20,12 @@ export default function TrackStatusPage() {
   );
   const [searchedEmail, setSearchedEmail] = useState("");
 
+  // Nothing about a previous search is persisted: the result list lives in
+  // component state only, so arriving here always shows an empty email form
+  // and always re-queries the DB. Caching it earlier meant a registration
+  // created after the last search stayed invisible until a manual reset.
   useEffect(() => {
-    let active = true;
-    (async () => {
-      await Promise.resolve();
-      if (!active) return;
-
-      const raw = sessionStorage.getItem(CACHE_KEY);
-      if (!raw) return;
-      try {
-        const cached: SearchCache = JSON.parse(raw);
-        if (Date.now() - cached.timestamp < CACHE_TTL_MS) {
-          setEmail(cached.email);
-          setSearchedEmail(cached.email);
-          setRegistrations(cached.registrations);
-        } else {
-          sessionStorage.removeItem(CACHE_KEY);
-        }
-      } catch {
-        sessionStorage.removeItem(CACHE_KEY);
-      }
-    })();
-    return () => {
-      active = false;
-    };
+    void clearTrackSessions();
   }, []);
 
   async function handleFind() {
@@ -80,18 +50,9 @@ export default function TrackStatusPage() {
     setRegistrations(data.registrations);
     setSearchedEmail(email);
     setLoading(false);
-    sessionStorage.setItem(
-      CACHE_KEY,
-      JSON.stringify({
-        email,
-        registrations: data.registrations,
-        timestamp: Date.now(),
-      } satisfies SearchCache),
-    );
   }
 
   function handleReset() {
-    sessionStorage.removeItem(CACHE_KEY);
     setRegistrations(null);
     setSearchedEmail("");
     setEmail("");
