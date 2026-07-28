@@ -94,6 +94,8 @@ export default function AlertsPanel() {
         {data.highRisk.length === 0 ? (
           <EmptyRow text="No high-risk visitors inside." />
         ) : (
+          // Everything in this list is HIGH by definition — the endpoint filters
+          // on it — so the tone is unconditional.
           data.highRisk.map((a) => (
             <AlertRow
               key={a.id}
@@ -105,7 +107,7 @@ export default function AlertsPanel() {
               ]
                 .filter(Boolean)
                 .join(" · ")}
-              tone={a.riskLevel === "CRITICAL" ? "destructive" : "primary"}
+              tone="destructive"
             />
           ))
         )}
@@ -159,7 +161,7 @@ function AlertSection({
           <div
             className={cn(
               "flex h-9 w-9 items-center justify-center rounded-lg border",
-              accent
+              accent,
             )}
           >
             <Icon className="h-4 w-4" />
@@ -196,7 +198,7 @@ function AlertRow({
       <span
         className={cn(
           "text-xs",
-          tone === "destructive" ? "text-destructive" : "text-primary"
+          tone === "destructive" ? "text-destructive" : "text-primary",
         )}
       >
         {meta}

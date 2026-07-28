@@ -54,8 +54,11 @@ export async function GET() {
         : null,
     }));
 
+  // HIGH only. CheckEvent.riskLevel is filled from assessRisk(), which returns
+  // LOW | MEDIUM | HIGH — CRITICAL exists in the shared RiskLevel enum but
+  // belongs to Zone.riskLevel, so testing for it here never matched anything.
   const highRisk = inside
-    .filter((e) => e.riskLevel === "HIGH" || e.riskLevel === "CRITICAL")
+    .filter((e) => e.riskLevel === "HIGH")
     .map((e) => ({
       id: e.id,
       fullName: e.Registration.fullName,
