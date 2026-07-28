@@ -1,0 +1,3280 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "SecureGate API",
+    "version": "2.0.0",
+    "description": "REST API for **SecureGate** — a Smart Contractor & Visitor Access Management\nSystem for manufacturing facilities.\n\n## Authentication\n\nThere are three separate auth mechanisms, all cookie- or header-based. None\nof them use an `Authorization: Bearer <user token>` header, so Swagger UI's\n\"Authorize\" button only covers the cron endpoint.\n\n| Mechanism | Applies to | How it is obtained |\n|---|---|---|\n| `staff_token` cookie (JWT, HS256, 8h) | everything under `/api/staff/*` | `POST /api/staff/login` |\n| `track_session_{trackingToken}` cookie (1h) | `/api/visit`, `/api/track/document/reupload` | `POST /api/track/verify` |\n| `Authorization: Bearer $CRON_SECRET` | `/api/cron/document-expiry` | environment variable |\n\nBecause the staff and tracking sessions are **httpOnly cookies**, Swagger UI\ncannot set them from JavaScript. To exercise those endpoints from Swagger UI:\n\n1. Call `POST /api/staff/login` (or `POST /api/track/verify`) from the same\n   browser — the browser stores the cookie automatically.\n2. Serve this spec from the **same origin** as the API so the cookie is sent.\n\nOtherwise use `curl -c/-b` or Postman, which handle cookie jars directly.\n\n## Roles\n\n`/api/staff/*` endpoints are gated per-role. Each operation documents the\nroles it accepts; a caller with a valid session but the wrong role also\nreceives **401** (not 403 — the implementation does not distinguish).\n\n## Conventions\n\n- All errors return `{ \"message\": \"<human readable>\" }` unless noted.\n  `POST /api/register` additionally returns a per-field `errors` map on 400.\n- All timestamps are ISO 8601 UTC strings. Rendered dates/times elsewhere in\n  the product are converted to WIB (UTC+7) at the presentation layer.\n- `trackingToken` in a URL path is **encrypted** (see `lib/token-crypto.ts`);\n  the same value in a request body is the raw token.\n",
+    "contact": {
+      "name": "SecureGate Team"
+    },
+    "license": {
+      "name": "Proprietary"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000",
+      "description": "Local development"
+    },
+    {
+      "url": "https://sandbox.securegate.my.id",
+      "description": "Sandbox / staging"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Public — Registration",
+      "description": "Unauthenticated endpoints used by contractors and visitors."
+    },
+    {
+      "name": "Public — Tracking",
+      "description": "Self-service status tracking, gated by email verification."
+    },
+    {
+      "name": "Staff — Auth"
+    },
+    {
+      "name": "Staff — Registrations"
+    },
+    {
+      "name": "Staff — Documents"
+    },
+    {
+      "name": "Staff — Visits"
+    },
+    {
+      "name": "Staff — Check-in / Check-out"
+    },
+    {
+      "name": "Staff — Blacklist"
+    },
+    {
+      "name": "Staff — Zones"
+    },
+    {
+      "name": "Staff — Monitoring"
+    },
+    {
+      "name": "Staff — Notifications"
+    },
+    {
+      "name": "Staff — Emergency"
+    },
+    {
+      "name": "Admin"
+    },
+    {
+      "name": "Ops"
+    }
+  ],
+  "paths": {
+    "/api/register": {
+      "post": {
+        "tags": [
+          "Public — Registration"
+        ],
+        "summary": "Submit a new registration",
+        "description": "Creates a `PENDING` registration and uploads its documents to blob\nstorage. Multipart form; file field names are lowercase keys, while the\nresulting document records use the uppercase `DocumentType` enum.\n\n**Required files** — `face` and `ktp` for both types; `bpjs`, `sio`, and\n`sia` additionally required when `type=CONTRACTOR`.\n\nFiles are validated three ways: MIME allowlist, 5 MB size cap, and magic\nbyte inspection (the declared MIME must match actual file content).\n\nA blacklisted email is refused with **403**. If a `REJECTED` registration\nalready exists for the same `(email, type)`, it is deleted so the\napplicant can re-apply; a `PENDING` or `APPROVED` one yields **409**.\n",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "fullName",
+                  "company",
+                  "email",
+                  "phone",
+                  "type",
+                  "face",
+                  "ktp"
+                ],
+                "properties": {
+                  "fullName": {
+                    "type": "string",
+                    "example": "Budi Santoso"
+                  },
+                  "company": {
+                    "type": "string",
+                    "example": "PT Maju Jaya"
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "description": "Lowercased server-side.",
+                    "example": "budi@majujaya.co.id"
+                  },
+                  "phone": {
+                    "type": "string",
+                    "example": "081234567890"
+                  },
+                  "type": {
+                    "$ref": "#/components/schemas/RegistrationType"
+                  },
+                  "face": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Face photo. JPEG/PNG/WebP only (no PDF)."
+                  },
+                  "ktp": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "National ID. JPEG/PNG/WebP only (no PDF)."
+                  },
+                  "bpjs": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Required for CONTRACTOR. JPEG/PNG/WebP/PDF."
+                  },
+                  "sio": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Required for CONTRACTOR. JPEG/PNG/WebP/PDF."
+                  },
+                  "sia": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Required for CONTRACTOR. JPEG/PNG/WebP/PDF."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created. A confirmation email containing the tracking link is sent,\nand HSE/HR are notified via Telegram. The tracking token is **not**\nreturned in the response body — it is delivered by email, and also\nset as a short-lived `pending_tracking_token` cookie (5 min).\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "example": "Registration created successfully"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing fields, or file validation failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "example": "File validation failed"
+                    },
+                    "errors": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      },
+                      "description": "Present only on file-validation failures.",
+                      "example": {
+                        "sio": "SIO: file content does not match its type"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Email is blacklisted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "message": "This email is not eligible to register. Please contact our HSE team for more information."
+                }
+              }
+            }
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
+      }
+    },
+    "/api/track/find": {
+      "post": {
+        "tags": [
+          "Public — Tracking"
+        ],
+        "summary": "Find registrations by email",
+        "description": "Returns every registration belonging to an email so the applicant can\npick one. The returned `trackingToken` values are **encrypted** and are\nmeant to be used directly as the `/track-status/{url}` path segment.\n",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "email"
+                ],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "example": "budi@majujaya.co.id"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "One or more registrations found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "registrations": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "trackingToken": {
+                            "type": "string",
+                            "description": "Encrypted token, safe to place in a URL."
+                          },
+                          "type": {
+                            "$ref": "#/components/schemas/RegistrationType"
+                          },
+                          "fullName": {
+                            "type": "string"
+                          },
+                          "company": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "$ref": "#/components/schemas/RegistrationStatus"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "description": "No registration found with this email.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/track/verify": {
+      "post": {
+        "tags": [
+          "Public — Tracking"
+        ],
+        "summary": "Verify email ownership for a tracking token",
+        "description": "Proves the caller owns the email behind a registration, then issues a\n`track_session_{token}` httpOnly cookie valid for **1 hour**. That cookie\nis what authorises `POST /api/visit` and\n`POST /api/track/document/reupload`.\n\nNote the asymmetry: `token` here is the **raw** `trackingToken`, whereas\nthe value in `/track-status/{url}` URLs is encrypted.\n\nNavigating to the tracking search page clears every `track_session_*`\ncookie, so each registration must be re-verified per visit.\n",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "token",
+                  "email"
+                ],
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "description": "Raw (unencrypted) tracking token."
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Verified. Sets the `track_session_{token}` cookie.",
+            "headers": {
+              "Set-Cookie": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "track_session_abc123=budi%40majujaya.co.id; Path=/; HttpOnly; SameSite=Strict; Max-Age=3600"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "verified": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "description": "Email does not match this registration.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/track/document/reupload": {
+      "post": {
+        "tags": [
+          "Public — Tracking"
+        ],
+        "summary": "Replace one or more of your documents",
+        "description": "Replaces documents **in place** — one row per document type, always. The\nexisting record is overwritten (new `filePath`, verification reset to\nzero, `replacedAt` stamped) rather than superseded by a new row, and the\nsuperseded blob is deleted. The replacement is recorded in the audit\ntrail as `DOCUMENT_REPLACED`, which is the only place the previous file\npath survives.\n\nSide effect: the parent registration returns to `PENDING` and its\n`rejectionReason` is cleared. This is how a `REJECTED` applicant re-enters\nthe review queue without filling in the whole form again.\n\nForm field names are the uppercase `DocumentType` values, and only types\nthat currently exist on the registration are accepted.\n",
+        "security": [
+          {
+            "trackSessionCookie": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "token"
+                ],
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "description": "Raw tracking token. Must match the `track_session_{token}` cookie."
+                  },
+                  "KTP": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "BPJS": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "SIO": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "SIA": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "FACE_PHOTO": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Documents replaced and resubmitted for review.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "example": "Documents uploaded and submitted for review"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "$ref": "#/components/schemas/DocumentType"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Token missing, no files submitted, or a file failed MIME/size validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "message": "SIO: file must be under 5 MB"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or mismatched `track_session_{token}` cookie.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
+      }
+    },
+    "/api/visit": {
+      "post": {
+        "tags": [
+          "Public — Tracking"
+        ],
+        "summary": "Request a visit",
+        "description": "Creates a `PENDING` visit for an **APPROVED** registration. Blocked with\n**403** if the registration is not approved, and with **400** if any\nactive document is expired.\n\n`windowStart`/`windowEnd` are `HH:MM` strings interpreted in WIB and\ncombined with `visitDate`.\n",
+        "security": [
+          {
+            "trackSessionCookie": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "token",
+                  "visitDate",
+                  "purpose",
+                  "windowStart",
+                  "windowEnd"
+                ],
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "description": "Raw tracking token. Must match the `track_session_{token}` cookie."
+                  },
+                  "visitDate": {
+                    "type": "string",
+                    "format": "date",
+                    "example": "2026-08-01"
+                  },
+                  "purpose": {
+                    "type": "string",
+                    "example": "Preventive maintenance on line 3"
+                  },
+                  "windowStart": {
+                    "type": "string",
+                    "pattern": "^[0-2][0-9]:[0-5][0-9]$",
+                    "example": "08:00"
+                  },
+                  "windowEnd": {
+                    "type": "string",
+                    "pattern": "^[0-2][0-9]:[0-5][0-9]$",
+                    "example": "16:00"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Visit request created; HSE/HR notified.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing fields, invalid window, or an expired document blocks new visits.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or mismatched `track_session_{token}` cookie.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Registration is not APPROVED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
+      }
+    },
+    "/api/staff/login": {
+      "post": {
+        "tags": [
+          "Staff — Auth"
+        ],
+        "summary": "Staff login",
+        "description": "Verifies credentials (bcrypt) and sets a `staff_token` httpOnly cookie\ncontaining an HS256 JWT valid for **8 hours**. The JWT payload carries\n`id`, `email`, `name`, and `role` — every `/api/staff/*` route reads its\nrole gate from there.\n\nThe token itself is never returned in the response body.\n",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "email",
+                  "password"
+                ],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "password": {
+                    "type": "string",
+                    "format": "password"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Logged in. Sets the `staff_token` cookie.",
+            "headers": {
+              "Set-Cookie": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "staff_token=eyJhbGci...; Path=/; HttpOnly; SameSite=Strict"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "example": "Login successful"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "description": "Invalid email or password, or the account is inactive.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
+      }
+    },
+    "/api/staff/logout": {
+      "post": {
+        "tags": [
+          "Staff — Auth"
+        ],
+        "summary": "Staff logout",
+        "description": "Clears the `staff_token` cookie. Always succeeds.",
+        "responses": {
+          "200": {
+            "description": "Logged out.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/staff/registrations": {
+      "get": {
+        "tags": [
+          "Staff — Registrations"
+        ],
+        "summary": "List registrations",
+        "description": "Roles: `HSE_ADMIN`, `HR_ADMIN`.\n\n`q` powers the registration picker in the blacklist-add flow — a\nblacklist entry must be created from a verified registration rather than\na free-typed identity. When `q` is supplied the result set is capped at\n20; without it, all registrations are returned.\n",
+        "security": [
+          {
+            "staffSessionCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/RegistrationStatus"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "description": "Case-insensitive substring match on `fullName`, `email`, or `company`.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "registrations": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/RegistrationListItem"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/staff/registrations/{id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/IdPath"
+        }
+      ],
+      "get": {
+        "tags": [
+          "Staff — Registrations"
+        ],
+        "summary": "Get a registration with its active documents",
+        "description": "Roles: `HSE_ADMIN`, `HR_ADMIN`.\n\nOnly `isActive: true` documents are included. Superseded rows remain in\nthe table for history but are filtered out, otherwise a re-uploaded type\nwould appear twice.\n",
+        "security": [
+          {
+            "staffSessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "registration": {
+                      "$ref": "#/components/schemas/RegistrationDetail"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Staff — Registrations"
+        ],
+        "summary": "Approve or reject a registration",
+        "description": "Roles: `HSE_ADMIN`, `HR_ADMIN`.\n\nOnly a `PENDING` registration can be reviewed — anything else returns\n**409**. There is deliberately **no un-reject path**: a rejected\napplicant either replaces documents via\n`POST /api/track/document/reupload` (which returns the record to\n`PENDING`) or registers again, which deletes the rejected row.\n\n`APPROVE` additionally requires every active document to be verified.\n\nWrites `REGISTRATION_APPROVED` / `REGISTRATION_REJECTED` to the audit\nlog and emails the applicant.\n",
+        "security": [
+          {
+            "staffSessionCookie": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "action"
+                ],
+                "properties": {
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "APPROVE",
+                      "REJECT"
+                    ]
+                  },
+                  "rejectionReason": {
+                    "type": "string",
+                    "description": "Required when `action=REJECT`."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Reviewed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "registration": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "$ref": "#/components/schemas/RegistrationStatus"
+                        },
+                        "rejectionReason": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "fullName": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid action, or `REJECT` without a reason.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Already reviewed, or unverified documents block approval.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "message": "Verify all documents before approving: SIO, SIA"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/staff/documents/{id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/IdPath"
+        }
+      ],
+      "patch": {
+        "tags": [
+          "Staff — Documents"
+        ],
+        "summary": "Verify or unverify a document (review screen)",
+        "description": "Roles: `HSE_ADMIN`, `HR_ADMIN`.\n\nOnly editable while the parent registration is `PENDING` — otherwise\n**403**. `expiryDate` must be in the future.\n",
+        "security": [
+          {
+            "staffSessionCookie": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "isVerified": {
+                    "type": "boolean"
+                  },
+                  "expiryDate": {
+                    "type": "string",
+                    "format": "date",
+                    "nullable": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "document": {
+                      "$ref": "#/components/schemas/Document"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "description": "Cannot modify documents of a reviewed registration.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/staff/documents/{id}/verify-upload": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/IdPath"
+        }
+      ],
+      "patch": {
+        "tags": [
+          "Staff — Documents"
+        ],
+        "summary": "Verify or unverify a document (monitoring screen)",
+        "description": "Roles: `HSE_ADMIN`, `HR_ADMIN`.\n\nUnlike `PATCH /api/staff/documents/{id}`, this endpoint works regardless\nof registration status, and carries the auto-transition logic:\n\n- **Verify** — if the registration is `PENDING` and every active document\n  is now verified, it is auto-promoted to `APPROVED` (`autoApproved: true`).\n- **Unverify** — an `APPROVED` registration is demoted back to `PENDING`.\n",
+        "security": [
+          {
+            "staffSessionCookie": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "isVerified": {
+                    "type": "boolean",
+                    "default": true
+                  },
+                  "expiryDate": {
+                    "type": "string",
+                    "format": "date",
+                    "description": "Required when verifying; must be a future date."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "document": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "isVerified": {
+                          "type": "boolean"
+                        },
+                        "expiryDate": {
+                          "type": "string",
+                          "format": "date-time",
+                          "nullable": true
+                        }
+                      }
+                    },
+                    "autoApproved": {
+                      "type": "boolean",
+                      "description": "Present on verify. True when this call promoted the registration to APPROVED."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Expiry date missing or not in the future.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/staff/documents/{id}/view": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/IdPath"
+        }
+      ],
+      "get": {
+        "tags": [
+          "Staff — Documents"
+        ],
+        "summary": "Stream a document file",
+        "description": "Roles: `HSE_ADMIN`, `HR_ADMIN`.\n\nProxies the private blob so the storage URL is never exposed to the\nbrowser. Errors are **plain text**, not JSON.\n",
+        "security": [
+          {
+            "staffSessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The file stream.",
+            "content": {
+              "image/jpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized (plain text body).",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Document not found in DB, or blob missing (plain text body).",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/staff/documents/monitor": {
+      "get": {
+        "tags": [
+          "Staff — Monitoring"
+        ],
+        "summary": "Document expiry monitor",
+        "description": "Roles: `HSE_ADMIN`, `HR_ADMIN`.\n\nActive documents of `APPROVED` registrations, enriched with expiry\nstatus and sorted by urgency.\n\nA document whose expiry date is **today** counts as `EXPIRED`, not\n\"0 days left\" — the threshold is `daysLeft <= 0`. `EXPIRING_SOON` spans\n1–7 days. `REVIEW` overrides expiry status for documents HSE has not yet\nverified.\n",
+        "security": [
+          {
+            "staffSessionCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "filter",
+            "in": "query",
+            "required": false,
+            "description": "- `all` (default) — everything\n- `review` — awaiting verification\n- `expiring7` — the whole EXPIRING_SOON window (1–7 days)\n- `expiring1` — the most urgent slice (1 day or less)\n- `expired` — already expired\n",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "all",
+                "review",
+                "expiring7",
+                "expiring1",
+                "expired"
+              ],
+              "default": "all"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "documents": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/MonitoredDocument"
+                      }
+                    },
+                    "summary": {
+                      "type": "object",
+                      "properties": {
+                        "expiring7": {
+                          "type": "integer"
+                        },
+                        "expiring1": {
+                          "type": "integer"
+                        },
+                        "expired": {
+                          "type": "integer"
+                        },
+                        "review": {
+                          "type": "integer"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/staff/visits/{id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/IdPath"
+        }
+      ],
+      "get": {
+        "tags": [
+          "Staff — Visits"
+        ],
+        "summary": "Get a visit with its registration and active documents",
+        "description": "Roles: `HSE_ADMIN`, `HR_ADMIN`.",
+        "security": [
+          {
+            "staffSessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "visit": {
+                      "$ref": "#/components/schemas/VisitDetail"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Staff — Visits"
+        ],
+        "summary": "Approve, reject, or re-scope a visit",
+        "description": "Roles: `HSE_ADMIN`, `HR_ADMIN`.\n\n`APPROVE` requires every active document to be verified **and** to carry\na valid future expiry date. `UPDATE_ZONES` changes `authorizedZones` on\nan already-approved visit and logs `VISIT_ZONES_UPDATED`.\n",
+        "security": [
+          {
+            "staffSessionCookie": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "action"
+                ],
+                "properties": {
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "APPROVE",
+                      "REJECT",
+                      "UPDATE_ZONES"
+                    ]
+                  },
+                  "zones": {
+                    "type": "array",
+                    "description": "Zone IDs. Required for `APPROVE` and `UPDATE_ZONES`.",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid action, missing zones, or documents lack a valid expiry date.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Wrong visit state, or unverified documents block approval.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/staff/checkin/validate": {
+      "post": {
+        "tags": [
+          "Staff — Check-in / Check-out"
+        ],
+        "summary": "Validate a scanned QR before granting entry",
+        "description": "Roles: `SECURITY_OPERATOR`, `HSE_ADMIN`, `HR_ADMIN`.\n\nRead-mostly pre-flight for the check-in console. Returns everything the\noperator needs to decide: identity, photo, zones, risk assessment,\nschedule window, and per-document expiry status.\n\n**Blacklist is a hard stop.** When blocked, the response is still `200`\nwith `blocked: true, blacklisted: true` and no override is offered — and\nthe attempt is persisted as a `DENIED` CheckEvent plus a\n`BLACKLIST_BLOCKED` audit entry.\n\n`needsOverride: true` signals an expired document, which *is*\noverridable with written justification (FR-014).\n\n`token` is the per-visit `visitToken`, not the registration-level\n`trackingToken`.\n",
+        "security": [
+          {
+            "staffSessionCookie": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "token"
+                ],
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "description": "The scanned `visitToken`."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Validation result. Note that a *refusal* is also `200` — inspect\n`blocked` and `blacklisted` rather than the status code.\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidateBlocked"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ValidateOk"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "Invalid token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/staff/checkin/confirm": {
+      "post": {
+        "tags": [
+          "Staff — Check-in / Check-out"
+        ],
+        "summary": "Confirm entry (creates the INSIDE CheckEvent)",
+        "description": "Roles: `SECURITY_OPERATOR`, `HSE_ADMIN`, `HR_ADMIN`.\n\nThe committing half of check-in. Re-verifies the blacklist server-side —\nit never trusts the client's earlier `validate` result.\n\nExpired documents return **422** with `needsOverride: true`; retry with\n`override: true` and a `justification` to proceed. Blacklist matches can\nnever be overridden.\n",
+        "security": [
+          {
+            "staffSessionCookie": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "token"
+                ],
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "description": "The scanned `visitToken`."
+                  },
+                  "override": {
+                    "type": "boolean",
+                    "default": false
+                  },
+                  "justification": {
+                    "type": "string",
+                    "description": "Required when `override=true`."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Checked in.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Override requested without a justification.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "description": "Blacklisted, or the visit is not approved. Not overridable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Invalid token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Already checked in.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Blocked but overridable — expired documents or outside the schedule window.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "needsOverride": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Expired documents — manual override required"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/staff/checkin/deny": {
+      "post": {
+        "tags": [
+          "Staff — Check-in / Check-out"
+        ],
+        "summary": "Deny entry with a reason",
+        "description": "Roles: `SECURITY_OPERATOR`, `HSE_ADMIN`, `HR_ADMIN`.\n\nRecords an explicit operator refusal as a `DENIED` CheckEvent.\n`token` is the scanned `visitToken`.\n",
+        "security": [
+          {
+            "staffSessionCookie": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "token",
+                  "reason"
+                ],
+                "properties": {
+                  "token": {
+                    "type": "string"
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Denial recorded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "Invalid token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/staff/checkin/checkout": {
+      "post": {
+        "tags": [
+          "Staff — Check-in / Check-out"
+        ],
+        "summary": "Check someone out",
+        "description": "Roles: `SECURITY_OPERATOR`, `HSE_ADMIN`, `HR_ADMIN`.\n\nCalled by the Security roster screen. `POST /api/staff/checkout` is a\nsecond route with identical behaviour, used by the HSE/HR \"Who's Inside\"\nscreen — both are live; neither is dead code.\n",
+        "security": [
+          {
+            "staffSessionCookie": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "checkEventId"
+                ],
+                "properties": {
+                  "checkEventId": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Checked out.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "Event not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Already checked out.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/staff/checkout": {
+      "post": {
+        "tags": [
+          "Staff — Check-in / Check-out"
+        ],
+        "summary": "Check someone out (alternate route)",
+        "description": "Roles: `SECURITY_OPERATOR`, `HSE_ADMIN`, `HR_ADMIN`.\n\nFunctionally equivalent to `POST /api/staff/checkin/checkout`. Both are\ngenuinely in use: this one backs the HSE/HR \"Who's Inside\" screen, the\nnested one backs the Security roster screen. Consolidating them onto a\nsingle route would be a reasonable cleanup, but neither is dead.\n",
+        "security": [
+          {
+            "staffSessionCookie": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "checkEventId"
+                ],
+                "properties": {
+                  "checkEventId": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Checked out.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Already checked out.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/staff/checkin/roster": {
+      "get": {
+        "tags": [
+          "Staff — Check-in / Check-out"
+        ],
+        "summary": "Live roster of people currently inside",
+        "description": "Roles: `SECURITY_OPERATOR`, `HSE_ADMIN`, `HR_ADMIN`.",
+        "security": [
+          {
+            "staffSessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/staff/checkin/alerts": {
+      "get": {
+        "tags": [
+          "Staff — Monitoring"
+        ],
+        "summary": "Security alerts (overstay, recent denials)",
+        "description": "Roles: `SECURITY_OPERATOR`, `HSE_ADMIN`, `HR_ADMIN`.",
+        "security": [
+          {
+            "staffSessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/staff/whos-inside": {
+      "get": {
+        "tags": [
+          "Staff — Monitoring"
+        ],
+        "summary": "Who is inside, grouped by zone",
+        "description": "Any authenticated staff role.",
+        "security": [
+          {
+            "staffSessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/staff/security/history": {
+      "get": {
+        "tags": [
+          "Staff — Monitoring"
+        ],
+        "summary": "Search visitor history",
+        "description": "Roles: `SECURITY_OPERATOR`, `HSE_ADMIN`, `HR_ADMIN`.\n\nWith `q` shorter than 2 characters, returns the 15 most recent distinct\nvisitors instead of performing a search.\n",
+        "security": [
+          {
+            "staffSessionCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "description": "Search term. Under 2 characters falls back to \"recent visitors\".",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/staff/security/history/{registrationId}": {
+      "parameters": [
+        {
+          "name": "registrationId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "get": {
+        "tags": [
+          "Staff — Monitoring"
+        ],
+        "summary": "Full check-in history for one person",
+        "description": "Roles: `SECURITY_OPERATOR`, `HSE_ADMIN`, `HR_ADMIN`.",
+        "security": [
+          {
+            "staffSessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/staff/blacklist": {
+      "get": {
+        "tags": [
+          "Staff — Blacklist"
+        ],
+        "summary": "List blacklist entries",
+        "description": "Roles: `HSE_ADMIN`, `HR_ADMIN`, `SECURITY_OPERATOR`.\n\nRead access is deliberately wider than write access — Security needs the\nwatchlist but must not be able to edit it.\n",
+        "security": [
+          {
+            "staffSessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "entries": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/BlacklistEntry"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Staff — Blacklist"
+        ],
+        "summary": "Blacklist a person",
+        "description": "Roles: `HSE_ADMIN`, `HR_ADMIN`.\n\n**`registrationId` is mandatory by design** — `fullName` and `email` are\nderived from that record, never accepted from the caller. This makes it\nimpossible to blacklist an arbitrary typed-in email; only a person whose\nidentity the system has already verified through submitted documents.\n\nDistinct from rejecting a registration: rejection closes one application\nand is reversible by re-applying, whereas a blacklist entry is a\nfacility-wide block enforced at the gate that no operator can override,\nand it also prevents new registrations.\n\nSide effects: `BLACKLIST_ADDED` audit entry, Telegram alert to HSE,\nin-app notification, and an email to the affected person.\n",
+        "security": [
+          {
+            "staffSessionCookie": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "registrationId",
+                  "reason"
+                ],
+                "properties": {
+                  "registrationId": {
+                    "type": "string"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "example": "Repeated safety violations"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "entry": {
+                      "$ref": "#/components/schemas/BlacklistEntry"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "Registration not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "This person is already blacklisted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Staff — Blacklist"
+        ],
+        "summary": "Remove a blacklist entry",
+        "description": "Roles: `HSE_ADMIN`, `HR_ADMIN`. Logs `BLACKLIST_REMOVED`.\n",
+        "security": [
+          {
+            "staffSessionCookie": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "id"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "Blacklist entry ID (not the registration ID)."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Removed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "Entry not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/staff/zones": {
+      "get": {
+        "tags": [
+          "Staff — Zones"
+        ],
+        "summary": "List zones",
+        "description": "Roles: `HSE_ADMIN`, `HR_ADMIN`.",
+        "security": [
+          {
+            "staffSessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "zones": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Zone"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Staff — Zones"
+        ],
+        "summary": "Create a zone",
+        "description": "Roles: `HSE_ADMIN`, `HR_ADMIN`. Logs `ZONE_CREATED`.",
+        "security": [
+          {
+            "staffSessionCookie": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "riskLevel"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "riskLevel": {
+                    "$ref": "#/components/schemas/RiskLevel"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "zone": {
+                      "$ref": "#/components/schemas/Zone"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Name missing or invalid risk level.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/staff/zones/{id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/IdPath"
+        }
+      ],
+      "patch": {
+        "tags": [
+          "Staff — Zones"
+        ],
+        "summary": "Update a zone",
+        "description": "Roles: `HSE_ADMIN`, `HR_ADMIN`. Logs `ZONE_UPDATED`.",
+        "security": [
+          {
+            "staffSessionCookie": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "riskLevel": {
+                    "$ref": "#/components/schemas/RiskLevel"
+                  },
+                  "isActive": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "zone": {
+                      "$ref": "#/components/schemas/Zone"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Name missing or invalid risk level.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "Zone not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/staff/notifications": {
+      "get": {
+        "tags": [
+          "Staff — Notifications"
+        ],
+        "summary": "Recent notifications and unread count",
+        "description": "Any authenticated staff role. Read state is tracked per user.",
+        "security": [
+          {
+            "staffSessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Notification"
+                      }
+                    },
+                    "unread": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Staff — Notifications"
+        ],
+        "summary": "Mark all notifications read for the current user",
+        "description": "Any authenticated staff role.",
+        "security": [
+          {
+            "staffSessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Marked read.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/staff/notifications/all": {
+      "get": {
+        "tags": [
+          "Staff — Notifications"
+        ],
+        "summary": "Paginated, filterable notification history",
+        "description": "Any authenticated staff role.",
+        "security": [
+          {
+            "staffSessionCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "description": "`ALL` (or omitted) disables the filter.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ALL",
+                "REGISTRATION_APPROVED",
+                "REGISTRATION_REJECTED",
+                "BLACKLIST_ALERT",
+                "TELEGRAM_MESSAGE",
+                "DOCUMENT_EXPIRY",
+                "OVERSTAY_ALERT",
+                "VISIT_REQUEST"
+              ]
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "description": "Case-insensitive substring match on `title` or `message`.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/staff/evacuation/generate": {
+      "get": {
+        "tags": [
+          "Staff — Emergency"
+        ],
+        "summary": "Generate the emergency evacuation list (PDF)",
+        "description": "Roles: `HSE_ADMIN`, `SECURITY_OPERATOR`.\n\nOne-click PDF roster of everyone currently inside, with zones, check-in\ntime, and overstay flags (FR-009). The generation timestamp is printed in\n**WIB**.\n\nIf the live query fails, the endpoint falls back to the last stored\nroster snapshot and the PDF is stamped with a red `FALLBACK SNAPSHOT —\nlast updated ...` banner so a stale list can never be mistaken for a\nlive one (FR-009A).\n\nReturns a binary PDF, not JSON.\n",
+        "security": [
+          {
+            "staffSessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The evacuation list PDF.",
+            "headers": {
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "attachment; filename=\"evacuation-list-1753612345678.pdf\""
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "no-store"
+              }
+            },
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/staff/admin/users": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "List staff accounts",
+        "description": "Role: `SYSTEM_ADMIN` only.",
+        "security": [
+          {
+            "staffSessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "users": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/StaffUser"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Create a staff account",
+        "description": "Role: `SYSTEM_ADMIN` only. Password is bcrypt-hashed (cost 12+).\nLogs `STAFF_CREATED`.\n",
+        "security": [
+          {
+            "staffSessionCookie": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "email",
+                  "role",
+                  "password"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "role": {
+                    "$ref": "#/components/schemas/Role"
+                  },
+                  "password": {
+                    "type": "string",
+                    "format": "password",
+                    "minLength": 8
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "user": {
+                      "$ref": "#/components/schemas/StaffUser"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing fields, invalid role, or password too short.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "409": {
+            "description": "Email already in use.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/staff/admin/users/{id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/IdPath"
+        }
+      ],
+      "patch": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Update a staff account",
+        "description": "Role: `SYSTEM_ADMIN` only. Any subset of fields may be sent.\nLogs `STAFF_UPDATED`.\n",
+        "security": [
+          {
+            "staffSessionCookie": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "role": {
+                    "$ref": "#/components/schemas/Role"
+                  },
+                  "isActive": {
+                    "type": "boolean"
+                  },
+                  "password": {
+                    "type": "string",
+                    "format": "password",
+                    "minLength": 8,
+                    "description": "Omit to leave the password unchanged."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "user": {
+                      "$ref": "#/components/schemas/StaffUser"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Nothing to update, invalid role, or password too short.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "Staff account not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/cron/document-expiry": {
+      "get": {
+        "tags": [
+          "Ops"
+        ],
+        "summary": "Trigger the document-expiry check",
+        "description": "Manual/ops trigger for FR-010. The automatic daily run (08:00 WIB) is\nscheduled in-process via `node-cron` in `instrumentation.ts`, since the\napp is deployed on a self-managed VPS rather than a platform with cron.\n\nNotifies HSE/HR via Telegram for documents at exactly **30, 14, or 7**\ndays from expiry.\n\nThis is the only endpoint that uses an `Authorization` header, so it is\nthe only one Swagger UI's \"Authorize\" button can drive.\n",
+        "security": [
+          {
+            "cronSecret": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Check completed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "checked": {
+                      "type": "integer",
+                      "description": "Documents examined."
+                    },
+                    "notified": {
+                      "type": "integer",
+                      "description": "Documents that hit a threshold and triggered notifications."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or wrong bearer token, or `CRON_SECRET` is unset.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "staffSessionCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "staff_token",
+        "description": "HS256 JWT, 8-hour expiry, set by `POST /api/staff/login`. **httpOnly**,\nso Swagger UI cannot attach it programmatically — log in from the same\nbrowser and serve this spec from the same origin, or use curl/Postman.\n"
+      },
+      "trackSessionCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "track_session_{trackingToken}",
+        "description": "Per-registration session cookie, 1-hour expiry, set by\n`POST /api/track/verify`. The cookie **name** embeds the raw tracking\ntoken, so each registration carries its own cookie — this is why it\ncannot be expressed as a fixed name here. **httpOnly.**\n"
+      },
+      "cronSecret": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "`Authorization: Bearer $CRON_SECRET`. Used only by `/api/cron/document-expiry`."
+      }
+    },
+    "parameters": {
+      "IdPath": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        },
+        "description": "CUID."
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "Missing or invalid request parameters.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "No valid session, **or** a valid session whose role is not permitted —\nthe implementation does not distinguish between the two.\n",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "message": "Unauthorized"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Resource not found.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Conflict": {
+        "description": "Conflicts with the current state of the resource.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "ServerError": {
+        "description": "Unexpected server error.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ]
+      },
+      "RegistrationType": {
+        "type": "string",
+        "enum": [
+          "CONTRACTOR",
+          "VISITOR"
+        ]
+      },
+      "RegistrationStatus": {
+        "type": "string",
+        "enum": [
+          "PENDING",
+          "APPROVED",
+          "REJECTED"
+        ]
+      },
+      "VisitStatus": {
+        "type": "string",
+        "enum": [
+          "PENDING",
+          "APPROVED",
+          "REJECTED",
+          "ACTIVE",
+          "COMPLETED",
+          "CANCELLED"
+        ]
+      },
+      "DocumentType": {
+        "type": "string",
+        "enum": [
+          "KTP",
+          "BPJS",
+          "SIO",
+          "SIA",
+          "FACE_PHOTO"
+        ]
+      },
+      "RiskLevel": {
+        "type": "string",
+        "enum": [
+          "LOW",
+          "MEDIUM",
+          "HIGH",
+          "CRITICAL"
+        ]
+      },
+      "Role": {
+        "type": "string",
+        "enum": [
+          "SECURITY_OPERATOR",
+          "HSE_ADMIN",
+          "HR_ADMIN",
+          "SYSTEM_ADMIN"
+        ]
+      },
+      "NotificationType": {
+        "type": "string",
+        "enum": [
+          "REGISTRATION_APPROVED",
+          "REGISTRATION_REJECTED",
+          "BLACKLIST_ALERT",
+          "TELEGRAM_MESSAGE",
+          "DOCUMENT_EXPIRY",
+          "OVERSTAY_ALERT",
+          "VISIT_REQUEST"
+        ]
+      },
+      "DocExpiryStatus": {
+        "type": "string",
+        "description": "`EXPIRED` covers `daysLeft <= 0` — a document expiring **today** is\nalready expired, not \"0 days left\". `EXPIRING_SOON` spans 1–7 days.\n",
+        "enum": [
+          "VALID",
+          "EXPIRING_SOON",
+          "EXPIRED",
+          "NO_EXPIRY"
+        ]
+      },
+      "RegistrationListItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "trackingToken": {
+            "type": "string",
+            "description": "Raw token (this endpoint is staff-only)."
+          },
+          "type": {
+            "$ref": "#/components/schemas/RegistrationType"
+          },
+          "fullName": {
+            "type": "string"
+          },
+          "company": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true
+          },
+          "status": {
+            "$ref": "#/components/schemas/RegistrationStatus"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "RegistrationDetail": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/RegistrationListItem"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "rejectionReason": {
+                "type": "string",
+                "nullable": true
+              },
+              "photoPath": {
+                "type": "string",
+                "nullable": true
+              },
+              "documents": {
+                "type": "array",
+                "description": "Active documents only.",
+                "items": {
+                  "$ref": "#/components/schemas/Document"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "Document": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "$ref": "#/components/schemas/DocumentType"
+          },
+          "filePath": {
+            "type": "string",
+            "description": "Blob pathname. Stream it via `/api/staff/documents/{id}/view`."
+          },
+          "expiryDate": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "isVerified": {
+            "type": "boolean"
+          }
+        }
+      },
+      "MonitoredDocument": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "$ref": "#/components/schemas/DocumentType"
+          },
+          "expiryDate": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "isVerified": {
+            "type": "boolean"
+          },
+          "daysLeft": {
+            "type": "integer",
+            "nullable": true,
+            "description": "Negative when already past expiry; `0` means expiring today."
+          },
+          "status": {
+            "type": "string",
+            "description": "`REVIEW` when unverified; otherwise a `DocExpiryStatus` value.",
+            "enum": [
+              "REVIEW",
+              "VALID",
+              "EXPIRING_SOON",
+              "EXPIRED",
+              "NO_EXPIRY"
+            ]
+          },
+          "fullName": {
+            "type": "string"
+          },
+          "company": {
+            "type": "string"
+          },
+          "registrationId": {
+            "type": "string"
+          }
+        }
+      },
+      "VisitDetail": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "purpose": {
+            "type": "string"
+          },
+          "visitDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "windowStart": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "windowEnd": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "visitToken": {
+            "type": "string",
+            "description": "The value encoded in the visitor's QR code."
+          },
+          "status": {
+            "$ref": "#/components/schemas/VisitStatus"
+          },
+          "authorizedZones": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "Registration": {
+            "type": "object",
+            "properties": {
+              "fullName": {
+                "type": "string"
+              },
+              "company": {
+                "type": "string"
+              },
+              "email": {
+                "type": "string"
+              },
+              "type": {
+                "$ref": "#/components/schemas/RegistrationType"
+              },
+              "documents": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Document"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ValidateOk": {
+        "type": "object",
+        "description": "Scan accepted for operator review.",
+        "properties": {
+          "valid": {
+            "type": "boolean",
+            "example": true
+          },
+          "blocked": {
+            "type": "boolean",
+            "example": false
+          },
+          "blacklisted": {
+            "type": "boolean",
+            "example": false
+          },
+          "alreadyInside": {
+            "type": "boolean"
+          },
+          "scheduleAllowed": {
+            "type": "boolean"
+          },
+          "scheduleReason": {
+            "type": "string",
+            "nullable": true
+          },
+          "registration": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "fullName": {
+                "type": "string"
+              },
+              "company": {
+                "type": "string"
+              },
+              "type": {
+                "$ref": "#/components/schemas/RegistrationType"
+              },
+              "photoPath": {
+                "type": "string",
+                "nullable": true,
+                "description": "Shown to the operator for manual visual comparison (no automated face matching)."
+              }
+            }
+          },
+          "visit": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "purpose": {
+                "type": "string"
+              },
+              "visitDate": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "windowStart": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "windowEnd": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "authorizedZones": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "zoneNames": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "risk": {
+            "type": "object",
+            "description": "Deterministic rule-based assessment (not a trained model)."
+          },
+          "documents": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "type": {
+                  "$ref": "#/components/schemas/DocumentType"
+                },
+                "isVerified": {
+                  "type": "boolean"
+                },
+                "expiryStatus": {
+                  "$ref": "#/components/schemas/DocExpiryStatus"
+                },
+                "expiryDate": {
+                  "type": "string",
+                  "format": "date-time",
+                  "nullable": true
+                }
+              }
+            }
+          },
+          "needsOverride": {
+            "type": "boolean",
+            "description": "True when an active document is expired. Overridable with justification."
+          },
+          "hasExpiringSoon": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ValidateBlocked": {
+        "type": "object",
+        "description": "Entry refused. Still returned with HTTP **200** — inspect `blocked`.\nWhen `blacklisted` is true there is no override path at all.\n",
+        "properties": {
+          "valid": {
+            "type": "boolean",
+            "example": true
+          },
+          "blocked": {
+            "type": "boolean",
+            "example": true
+          },
+          "blacklisted": {
+            "type": "boolean"
+          },
+          "fullName": {
+            "type": "string"
+          },
+          "company": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "message": {
+            "type": "string",
+            "example": "BLACKLISTED — Entry Denied. No override available."
+          }
+        }
+      },
+      "BlacklistEntry": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "registrationId": {
+            "type": "string",
+            "nullable": true,
+            "description": "Nullable in the schema, so an entry is not structurally bound to a registration."
+          },
+          "fullName": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "blacklistedBy": {
+            "type": "string",
+            "description": "Staff user ID."
+          },
+          "company": {
+            "type": "string",
+            "nullable": true,
+            "description": "Resolved from the linked registration; present on the list endpoint only."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Zone": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "riskLevel": {
+            "$ref": "#/components/schemas/RiskLevel"
+          },
+          "isActive": {
+            "type": "boolean"
+          }
+        }
+      },
+      "StaffUser": {
+        "type": "object",
+        "description": "Password hashes are never returned.",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Notification": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "$ref": "#/components/schemas/NotificationType"
+          },
+          "title": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "isRead": {
+            "type": "boolean",
+            "description": "Per-user, derived from the NotificationRead join table."
+          }
+        }
+      }
+    }
+  }
+}
