@@ -125,7 +125,8 @@ export default function BlacklistAction({
         <p className="text-muted-foreground text-sm">
           Any of their registrations still pending or approved will be{" "}
           <strong>rejected automatically</strong> — including a second
-          registration of the other type, if they have one.
+          registration of the other type, if they have one. Open visit requests
+          are cancelled along with them.
         </p>
 
         <textarea

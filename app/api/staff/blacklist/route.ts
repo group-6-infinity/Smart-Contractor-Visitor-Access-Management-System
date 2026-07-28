@@ -112,6 +112,20 @@ export async function POST(req: NextRequest) {
     select: { id: true, type: true, status: true },
   });
 
+  // Open visits are cancelled alongside the registrations. Leaving an APPROVED
+  // visit behind means the person keeps a QR code that looks valid, a PENDING
+  // one keeps sitting in the HSE approval queue, and if the block is later
+  // removed they could walk in on a permission granted *before* whatever got
+  // them blacklisted — without any fresh review. The gate blocks them either
+  // way, so this is about consistency, not access.
+  const affectedVisits = await prisma.visit.findMany({
+    where: {
+      registrationId: { in: affected.map((r) => r.id) },
+      status: { in: ["PENDING", "APPROVED"] },
+    },
+    select: { id: true, status: true },
+  });
+
   const rejectionReason = `Blacklisted: ${reason}`;
 
   const [entry] = await prisma.$transaction([
@@ -127,6 +141,10 @@ export async function POST(req: NextRequest) {
     prisma.registration.updateMany({
       where: { id: { in: affected.map((r) => r.id) } },
       data: { status: "REJECTED", rejectionReason },
+    }),
+    prisma.visit.updateMany({
+      where: { id: { in: affectedVisits.map((v) => v.id) } },
+      data: { status: "CANCELLED" },
     }),
   ]);
 
@@ -153,6 +171,26 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  for (const v of affectedVisits) {
+    try {
+      await appendAuditLog({
+        action: "VISIT_REJECTED",
+        actorId: session.id,
+        actorEmail: session.email,
+        targetType: "Visit",
+        targetId: v.id,
+        metadata: {
+          fullName: registration.fullName,
+          previousStatus: v.status,
+          newStatus: "CANCELLED",
+          cause: "BLACKLIST_ADDED",
+        },
+      });
+    } catch {
+      console.error(`[AUDIT LOG] visit cancel append failed for ${v.id}`);
+    }
+  }
+
   const rejectedNote =
     affected.length > 0
       ? ` ${affected.length} open registration${affected.length === 1 ? "" : "s"} (${affected
@@ -160,11 +198,16 @@ export async function POST(req: NextRequest) {
           .join(", ")}) automatically rejected.`
       : "";
 
+  const cancelledNote =
+    affectedVisits.length > 0
+      ? ` ${affectedVisits.length} open visit${affectedVisits.length === 1 ? "" : "s"} cancelled.`
+      : "";
+
   try {
     await createNotification({
       type: "BLACKLIST_ALERT",
       title: "Blacklist entry added",
-      message: `${registration.fullName} (${registration.email}) has been blacklisted. Reason: ${reason}.${rejectedNote}`,
+      message: `${registration.fullName} (${registration.email}) has been blacklisted. Reason: ${reason}.${rejectedNote}${cancelledNote}`,
     });
   } catch {
     console.error("[NOTIFICATION] blacklist notify failed");
@@ -180,6 +223,9 @@ export async function POST(req: NextRequest) {
         `<b>By:</b> ${session.email}` +
         (affected.length > 0
           ? `\n<b>Auto-rejected:</b> ${affected.map((r) => r.type).join(", ")}`
+          : "") +
+        (affectedVisits.length > 0
+          ? `\n<b>Visits cancelled:</b> ${affectedVisits.length}`
           : ""),
     );
   } catch {
@@ -208,6 +254,7 @@ export async function POST(req: NextRequest) {
         email: registration.email,
         reason,
         autoRejectedRegistrations: affected.map((r) => `${r.type} (${r.id})`),
+        cancelledVisits: affectedVisits.map((v) => v.id),
       },
     });
   } catch (err) {
@@ -218,6 +265,7 @@ export async function POST(req: NextRequest) {
     {
       entry: { ...entry, createdAt: entry.createdAt.toISOString() },
       autoRejected: affected.map((r) => ({ id: r.id, type: r.type })),
+      cancelledVisits: affectedVisits.map((v) => v.id),
     },
     { status: 201 },
   );
