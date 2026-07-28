@@ -6,6 +6,7 @@ import { sendTelegramMessage } from "@/lib/telegram";
 import { NotificationType } from "@/lib/generated/prisma/enums";
 import { parseWIBDate } from "@/lib/datetime";
 import { generateVisitToken } from "@/lib/visit-token";
+import { isBlacklisted } from "@/lib/blacklist";
 
 export async function POST(req: NextRequest) {
   try {
@@ -46,6 +47,24 @@ export async function POST(req: NextRequest) {
     if (registration.status !== "APPROVED") {
       return NextResponse.json(
         { message: "Registration must be approved before requesting a visit" },
+        { status: 403 },
+      );
+    }
+
+    // Blacklisting someone whose registration is already APPROVED does not
+    // change that status (it is a property of the person, not of this one
+    // application), so without this check they could keep booking visits and
+    // collecting QR codes, only to be turned away at the gate.
+    const blocked = await isBlacklisted({
+      email: registration.email,
+      registrationId: registration.id,
+    });
+    if (blocked.blocked) {
+      return NextResponse.json(
+        {
+          message:
+            "Visit requests are not available for this registration. Please contact our HSE team.",
+        },
         { status: 403 },
       );
     }

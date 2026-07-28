@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { createNotification } from "@/lib/notifications";
 import { appendAuditLog } from "@/lib/audit-log";
+import { isBlacklisted } from "@/lib/blacklist";
 import { NotificationType } from "@/lib/generated/prisma/enums";
 
 const ALLOWED_MIME = ["image/jpeg", "image/png", "application/pdf"];
@@ -37,6 +38,25 @@ export async function POST(req: NextRequest) {
     const sessionEmail = cookieStore.get(`track_session_${token}`)?.value;
     if (sessionEmail !== registration.email) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    }
+
+    // A successful re-upload sends the registration back to PENDING, so
+    // without this a blacklisted person could re-enter the HSE review queue
+    // just by replacing a document. Checked before any blob upload so a
+    // blocked request costs nothing. Message stays vague on purpose — same
+    // reasoning as the 403 in /api/register.
+    const blocked = await isBlacklisted({
+      email: registration.email,
+      registrationId: registration.id,
+    });
+    if (blocked.blocked) {
+      return NextResponse.json(
+        {
+          message:
+            "This registration can no longer be updated. Please contact our HSE team.",
+        },
+        { status: 403 },
+      );
     }
 
     const activeDocs = await prisma.documents.findMany({
