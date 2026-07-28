@@ -180,8 +180,13 @@ export default function BlacklistAddDialog({
 
             <p className="text-muted-foreground text-sm">
               You are about to blacklist <strong>{selected.fullName}</strong>.
-              They will be automatically denied at check-in. Please provide a
-              reason.
+              They will be automatically denied at check-in with no operator
+              override, and cannot submit a new registration.
+            </p>
+            <p className="text-muted-foreground text-sm">
+              Any of their registrations still pending or approved will be{" "}
+              <strong>rejected automatically</strong> — including a second
+              registration of the other type, if they have one.
             </p>
 
             <textarea

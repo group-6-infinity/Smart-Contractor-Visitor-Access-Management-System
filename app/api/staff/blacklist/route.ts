@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
   if (!registrationId || !reason?.trim()) {
     return NextResponse.json(
       { message: "Registration and reason are required" },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
   if (!registration) {
     return NextResponse.json(
       { message: "Registration not found" },
-      { status: 404 }
+      { status: 404 },
     );
   }
 
@@ -91,25 +91,80 @@ export async function POST(req: NextRequest) {
   if (existing) {
     return NextResponse.json(
       { message: "This person is already blacklisted" },
-      { status: 409 }
+      { status: 409 },
     );
   }
 
-  const entry = await prisma.blacklist.create({
-    data: {
-      fullName: registration.fullName,
+  // Blocking the person closes their open applications too. Scoped by email,
+  // not by the registrationId passed in: the blacklist is facility-wide and one
+  // person can hold both a CONTRACTOR and a VISITOR registration, so rejecting
+  // only the one the operator happened to be looking at would leave the other
+  // sitting in the review queue.
+  //
+  // APPROVED registrations are demoted as well — that is the whole point, since
+  // an approved registration is what unlocks visit requests. Done in the same
+  // transaction as the blacklist entry so the two can't disagree.
+  const affected = await prisma.registration.findMany({
+    where: {
       email: registration.email,
-      reason,
-      registrationId: registration.id,
-      blacklistedBy: session.id,
+      status: { in: ["PENDING", "APPROVED"] },
     },
+    select: { id: true, type: true, status: true },
   });
+
+  const rejectionReason = `Blacklisted: ${reason}`;
+
+  const [entry] = await prisma.$transaction([
+    prisma.blacklist.create({
+      data: {
+        fullName: registration.fullName,
+        email: registration.email,
+        reason,
+        registrationId: registration.id,
+        blacklistedBy: session.id,
+      },
+    }),
+    prisma.registration.updateMany({
+      where: { id: { in: affected.map((r) => r.id) } },
+      data: { status: "REJECTED", rejectionReason },
+    }),
+  ]);
+
+  // One audit entry per registration, separate from BLACKLIST_ADDED below —
+  // a status change driven by something other than a reviewer's decision still
+  // needs to be attributable.
+  for (const reg of affected) {
+    try {
+      await appendAuditLog({
+        action: "REGISTRATION_REJECTED",
+        actorId: session.id,
+        actorEmail: session.email,
+        targetType: "Registration",
+        targetId: reg.id,
+        metadata: {
+          fullName: registration.fullName,
+          previousStatus: reg.status,
+          rejectionReason,
+          cause: "BLACKLIST_ADDED",
+        },
+      });
+    } catch {
+      console.error(`[AUDIT LOG] auto-reject append failed for ${reg.id}`);
+    }
+  }
+
+  const rejectedNote =
+    affected.length > 0
+      ? ` ${affected.length} open registration${affected.length === 1 ? "" : "s"} (${affected
+          .map((r) => r.type)
+          .join(", ")}) automatically rejected.`
+      : "";
 
   try {
     await createNotification({
       type: "BLACKLIST_ALERT",
       title: "Blacklist entry added",
-      message: `${registration.fullName} (${registration.email}) has been blacklisted. Reason: ${reason}`,
+      message: `${registration.fullName} (${registration.email}) has been blacklisted. Reason: ${reason}.${rejectedNote}`,
     });
   } catch {
     console.error("[NOTIFICATION] blacklist notify failed");
@@ -122,7 +177,10 @@ export async function POST(req: NextRequest) {
         `<b>Name:</b> ${registration.fullName}\n` +
         `<b>Email:</b> ${registration.email}\n` +
         `<b>Reason:</b> ${reason}\n` +
-        `<b>By:</b> ${session.email}`
+        `<b>By:</b> ${session.email}` +
+        (affected.length > 0
+          ? `\n<b>Auto-rejected:</b> ${affected.map((r) => r.type).join(", ")}`
+          : ""),
     );
   } catch {
     console.error("[TELEGRAM] blacklist notify failed");
@@ -149,6 +207,7 @@ export async function POST(req: NextRequest) {
         fullName: registration.fullName,
         email: registration.email,
         reason,
+        autoRejectedRegistrations: affected.map((r) => `${r.type} (${r.id})`),
       },
     });
   } catch (err) {
@@ -156,8 +215,11 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json(
-    { entry: { ...entry, createdAt: entry.createdAt.toISOString() } },
-    { status: 201 }
+    {
+      entry: { ...entry, createdAt: entry.createdAt.toISOString() },
+      autoRejected: affected.map((r) => ({ id: r.id, type: r.type })),
+    },
+    { status: 201 },
   );
 }
 
