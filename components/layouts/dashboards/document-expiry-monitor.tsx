@@ -22,8 +22,8 @@ interface DocRow {
 }
 
 interface Summary {
-  expiring30: number;
   expiring7: number;
+  expiring1: number;
   expired: number;
   review: number;
 }
@@ -47,8 +47,8 @@ const STATUS_LABEL: Record<string, string> = {
 const FILTERS = [
   { value: "all", label: "All" },
   { value: "review", label: "Needs Review" },
-  { value: "expiring30", label: "Expiring in 30d" },
   { value: "expiring7", label: "Expiring in 7d" },
+  { value: "expiring1", label: "Expiring in 1d" },
   { value: "expired", label: "Expired" },
 ];
 
@@ -63,8 +63,8 @@ function formatReadableDate(iso: string) {
 export default function DocumentExpiryMonitor() {
   const [docs, setDocs] = useState<DocRow[]>([]);
   const [summary, setSummary] = useState<Summary>({
-    expiring30: 0,
     expiring7: 0,
+    expiring1: 0,
     expired: 0,
     review: 0,
   });
@@ -111,14 +111,14 @@ export default function DocumentExpiryMonitor() {
           accent="bg-info-muted text-info"
         />
         <SummaryCard
-          label="Expiring in 30d"
-          value={summary.expiring30}
+          label="Expiring in 7d"
+          value={summary.expiring7}
           icon={Clock}
           accent="bg-info-muted text-info"
         />
         <SummaryCard
-          label="Expiring in 7d"
-          value={summary.expiring7}
+          label="Expiring in 1d"
+          value={summary.expiring1}
           icon={Clock}
           accent="bg-primary/10 text-primary"
         />
@@ -193,9 +193,9 @@ export default function DocumentExpiryMonitor() {
                       <span
                         className={cn(
                           "ml-1",
-                          d.daysLeft < 0
+                          d.status === "EXPIRED"
                             ? "text-destructive"
-                            : d.daysLeft <= 7
+                            : d.status === "EXPIRING_SOON"
                               ? "text-primary"
                               : "",
                         )}
@@ -203,7 +203,9 @@ export default function DocumentExpiryMonitor() {
                         (
                         {d.daysLeft < 0
                           ? `${Math.abs(d.daysLeft)}d ago`
-                          : `${d.daysLeft}d left`}
+                          : d.daysLeft === 0
+                            ? "expired today"
+                            : `${d.daysLeft}d left`}
                         )
                       </span>
                     )}
@@ -325,8 +327,8 @@ function VerifyAction({
     >
       <div className="space-y-4">
         <p className="text-muted-foreground text-sm">
-          Set the expiry date for this document. Once verified, the person
-          can submit visit requests.
+          Set the expiry date for this document. Once verified, the person can
+          submit visit requests.
         </p>
         <div className="space-y-1">
           <label className="text-muted-foreground text-sm">
