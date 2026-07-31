@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { ShieldAlert, Ban, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatTimeWIB } from "@/lib/datetime";
+import { usePulse } from "@/hooks/use-pulse";
+import LiveIndicator from "@/components/common/live-indicator";
 
 interface AlertItem {
   id: string;
@@ -27,27 +29,19 @@ export default function AlertsPanel() {
   const [data, setData] = useState<AlertsData | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    let active = true;
-    async function load() {
-      await Promise.resolve();
-      if (!active) return;
-      try {
-        const res = await fetch("/api/staff/checkin/alerts");
-        if (!res.ok || !active) return;
-        const d = await res.json();
-        if (active) setData(d);
-      } finally {
-        if (active) setLoading(false);
-      }
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch("/api/staff/checkin/alerts", {
+        cache: "no-store",
+      });
+      if (!res.ok) return;
+      setData(await res.json());
+    } finally {
+      setLoading(false);
     }
-    load();
-    const interval = setInterval(load, 30000);
-    return () => {
-      active = false;
-      clearInterval(interval);
-    };
   }, []);
+
+  usePulse("inside", load, { initial: true, maxStaleMs: 60000 });
 
   if (loading) {
     return (
@@ -60,6 +54,10 @@ export default function AlertsPanel() {
 
   return (
     <div className="space-y-6">
+      <div className="flex justify-end">
+        <LiveIndicator />
+      </div>
+
       {/* Overstay */}
       <AlertSection
         title="Overstay"

@@ -1,4 +1,5 @@
 import VisitsTable from "@/components/layouts/dashboards/visit-table";
+import LiveIndicator from "@/components/common/live-indicator";
 import prisma from "@/lib/prisma";
 export default async function VisitsPage() {
   const visits = await prisma.visit.findMany({
@@ -30,11 +31,14 @@ export default async function VisitsPage() {
 
   return (
     <div className="p-8">
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold">Visit Approvals</h1>
-        <p className="text-muted-foreground text-sm">
-          Review visit requests and assign authorized zones.
-        </p>
+      <div className="mb-6 flex items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold">Visit Approvals</h1>
+          <p className="text-muted-foreground text-sm">
+            Review visit requests and assign authorized zones.
+          </p>
+        </div>
+        <LiveIndicator className="shrink-0 pb-0.5" />
       </div>
 
       <VisitsTable initialRows={rows} />

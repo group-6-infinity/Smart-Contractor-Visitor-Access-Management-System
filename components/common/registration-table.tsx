@@ -1,11 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { ChevronRight, HardHat, Search, ShieldBan, User } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
+import { usePulse } from "@/hooks/use-pulse";
+import LiveIndicator from "./live-indicator";
 
 interface RegistrationRow {
   id: string;
@@ -45,25 +47,41 @@ export default function RegistrationsTable({
 }) {
   const [tab, setTab] = useState<Tab>("ALL");
   const [query, setQuery] = useState("");
+  const [rows, setRows] = useState<RegistrationRow[]>(initialRows);
+
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch("/api/staff/registrations", {
+        cache: "no-store",
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      setRows(data.registrations);
+    } catch {
+      // silent
+    }
+  }, []);
+
+  usePulse("registrations", load);
 
   const counts = useMemo(
     () => ({
-      ALL: initialRows.length,
-      PENDING: initialRows.filter((r) => r.status === "PENDING").length,
-      APPROVED: initialRows.filter((r) => r.status === "APPROVED").length,
-      REJECTED: initialRows.filter((r) => r.status === "REJECTED").length,
-      BLACKLISTED: initialRows.filter((r) => r.isBlacklisted).length,
+      ALL: rows.length,
+      PENDING: rows.filter((r) => r.status === "PENDING").length,
+      APPROVED: rows.filter((r) => r.status === "APPROVED").length,
+      REJECTED: rows.filter((r) => r.status === "REJECTED").length,
+      BLACKLISTED: rows.filter((r) => r.isBlacklisted).length,
     }),
-    [initialRows],
+    [rows],
   );
 
   const filtered = useMemo(() => {
     const byTab =
       tab === "ALL"
-        ? initialRows
+        ? rows
         : tab === "BLACKLISTED"
-          ? initialRows.filter((r) => r.isBlacklisted)
-          : initialRows.filter((r) => r.status === tab);
+          ? rows.filter((r) => r.isBlacklisted)
+          : rows.filter((r) => r.status === tab);
 
     const q = query.trim().toLowerCase();
     if (!q) return byTab;
@@ -74,18 +92,21 @@ export default function RegistrationsTable({
         r.email.toLowerCase().includes(q) ||
         r.trackingToken.toLowerCase().includes(q),
     );
-  }, [tab, query, initialRows]);
+  }, [tab, query, rows]);
 
   return (
     <div className="space-y-4">
-      <div className="relative w-full max-w-sm">
-        <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
-        <Input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search by name or company..."
-          className="pl-9"
-        />
+      <div className="flex items-center justify-between gap-4">
+        <div className="relative w-full max-w-sm">
+          <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search by name or company..."
+            className="pl-9"
+          />
+        </div>
+        <LiveIndicator className="shrink-0" />
       </div>
 
       <div className="border-border flex gap-1 border-b pb-2">

@@ -1,12 +1,7 @@
 import WhosInsideTable from "@/components/layouts/dashboards/whos-inside-table";
 import EvacuationButton from "@/components/layouts/dashboards/evacuation-button";
 import prisma from "@/lib/prisma";
-
-const GRACE_MS = 15 * 60 * 1000;
-
-function computeOverstay(windowEnd: Date): boolean {
-  return Date.now() > windowEnd.getTime() + GRACE_MS;
-}
+import { isOverstay } from "@/lib/overstay";
 
 export default async function WhosInsidePage() {
   const events = await prisma.checkEvent.findMany({
@@ -37,7 +32,7 @@ export default async function WhosInsidePage() {
     purpose: e.Visit.purpose,
     checkInAt: e.checkInAt.toISOString(),
     windowEnd: e.Visit.windowEnd.toISOString(),
-    isOverstay: computeOverstay(e.Visit.windowEnd),
+    isOverstay: isOverstay(e.Visit.windowEnd),
   }));
 
   return (

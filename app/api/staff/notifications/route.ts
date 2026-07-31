@@ -1,4 +1,5 @@
 import prisma from "@/lib/prisma";
+import { getBellFeed } from "@/lib/notification-feed";
 import { jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
@@ -22,27 +23,25 @@ export async function GET() {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
 
-  const [notifications, readState] = await Promise.all([
-    prisma.notification.findMany({
-      orderBy: { createdAt: "desc" },
-      take: 20,
-    }),
+  const [feed, readState] = await Promise.all([
+    getBellFeed(20),
     prisma.notificationRead.findUnique({ where: { userId: session.id } }),
   ]);
 
   const lastReadAt = readState?.lastReadAt ?? new Date(0);
-  const unreadCount = notifications.filter(
-    (n) => n.createdAt > lastReadAt
-  ).length;
+  const unreadCount = feed.filter((n) => n.createdAt > lastReadAt).length;
 
-  return NextResponse.json({
-    notifications: notifications.map((n) => ({
-      ...n,
-      createdAt: n.createdAt.toISOString(),
-      isRead: n.createdAt <= lastReadAt,
-    })),
-    unreadCount,
-  });
+  return NextResponse.json(
+    {
+      notifications: feed.map((n) => ({
+        ...n,
+        createdAt: n.createdAt.toISOString(),
+        isRead: n.createdAt <= lastReadAt,
+      })),
+      unreadCount,
+    },
+    { headers: { "Cache-Control": "no-store" } },
+  );
 }
 
 // Mark all as read — update lastReadAt ke sekarang
@@ -52,10 +51,12 @@ export async function POST() {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
 
+  const [{ now }] = await prisma.$queryRaw<[{ now: Date }]>`SELECT NOW() AS now`;
+
   await prisma.notificationRead.upsert({
     where: { userId: session.id },
-    create: { userId: session.id, lastReadAt: new Date() },
-    update: { lastReadAt: new Date() },
+    create: { userId: session.id, lastReadAt: now },
+    update: { lastReadAt: now },
   });
 
   return NextResponse.json({ message: "Marked as read" });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Bell,
   ShieldX,
@@ -10,9 +10,12 @@ import {
   CalendarClock,
   Clock,
   FileWarning,
+  UserPlus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { usePulse } from "@/hooks/use-pulse";
+import { REGISTRATION_FEED_TYPE } from "@/lib/notification-types";
 
 interface NotificationItem {
   id: string;
@@ -49,6 +52,10 @@ const TYPE_ICON: Record<
     icon: CalendarClock,
     className: "bg-info-muted text-info",
   },
+  [REGISTRATION_FEED_TYPE]: {
+    icon: UserPlus,
+    className: "bg-info-muted text-info",
+  },
 };
 
 function relativeTime(iso: string) {
@@ -61,8 +68,6 @@ function relativeTime(iso: string) {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
-const POLL_INTERVAL = 30000;
-
 export default function NotificationBell() {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<NotificationItem[]>([]);
@@ -70,29 +75,22 @@ export default function NotificationBell() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    let active = true;
-
-    async function poll() {
-      try {
-        const res = await fetch("/api/staff/notifications");
-        if (!res.ok || !active) return;
-        const data = await res.json();
-        if (!active) return;
-        setItems(data.notifications);
-        setUnread(data.unreadCount);
-      } catch {
-        // silent fail — don't disrupt UI on polling error
-      }
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch("/api/staff/notifications", {
+        cache: "no-store",
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      setItems(data.notifications);
+      setUnread(data.unreadCount);
+    } catch {
+      // silent
     }
-
-    poll();
-    const interval = setInterval(poll, POLL_INTERVAL);
-    return () => {
-      active = false;
-      clearInterval(interval);
-    };
   }, []);
+
+  usePulse("notifications", load, { initial: true });
+  usePulse("registrations", load);
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {

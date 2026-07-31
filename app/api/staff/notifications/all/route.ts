@@ -1,4 +1,5 @@
 import prisma from "@/lib/prisma";
+import { getPagedFeed } from "@/lib/notification-feed";
 import { jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
@@ -30,42 +31,28 @@ export async function GET(req: NextRequest) {
   const q = searchParams.get("q")?.trim(); // optional search
   const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10));
 
-  const where: Record<string, unknown> = {};
-  if (type && type !== "ALL") {
-    where.type = type;
-  }
-  if (q) {
-    where.OR = [
-      { title: { contains: q, mode: "insensitive" } },
-      { message: { contains: q, mode: "insensitive" } },
-    ];
-  }
-
-  const [notifications, total, readState] = await Promise.all([
-    prisma.notification.findMany({
-      where,
-      orderBy: { createdAt: "desc" },
-      skip: (page - 1) * PAGE_SIZE,
-      take: PAGE_SIZE,
-    }),
-    prisma.notification.count({ where }),
+  const [{ items, total }, readState] = await Promise.all([
+    getPagedFeed({ type, q, page, pageSize: PAGE_SIZE }),
     prisma.notificationRead.findUnique({ where: { userId: session.id } }),
   ]);
 
   const lastReadAt = readState?.lastReadAt ?? new Date(0);
 
-  return NextResponse.json({
-    notifications: notifications.map((n) => ({
-      id: n.id,
-      type: n.type,
-      title: n.title,
-      message: n.message,
-      createdAt: n.createdAt.toISOString(),
-      isRead: n.createdAt <= lastReadAt,
-    })),
-    total,
-    page,
-    pageSize: PAGE_SIZE,
-    totalPages: Math.ceil(total / PAGE_SIZE),
-  });
+  return NextResponse.json(
+    {
+      notifications: items.map((n) => ({
+        id: n.id,
+        type: n.type,
+        title: n.title,
+        message: n.message,
+        createdAt: n.createdAt.toISOString(),
+        isRead: n.createdAt <= lastReadAt,
+      })),
+      total,
+      page,
+      pageSize: PAGE_SIZE,
+      totalPages: Math.max(1, Math.ceil(total / PAGE_SIZE)),
+    },
+    { headers: { "Cache-Control": "no-store" } },
+  );
 }
