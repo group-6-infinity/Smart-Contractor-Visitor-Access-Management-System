@@ -1,4 +1,5 @@
 import prisma from "@/lib/prisma";
+import { isOverstay } from "@/lib/overstay";
 import { jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
@@ -54,8 +55,7 @@ export async function GET() {
       purpose: e.Visit.purpose,
       checkInAt: e.checkInAt.toISOString(),
       windowEnd: e.Visit.windowEnd.toISOString(),
-      // overstay kalau sekarang > windowEnd + 15 menit grace
-      isOverstay: now > e.Visit.windowEnd.getTime() + 15 * 60 * 1000,
+      isOverstay: isOverstay(e.Visit.windowEnd, now),
     })),
   });
 }

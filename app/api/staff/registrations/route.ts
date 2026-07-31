@@ -57,5 +57,22 @@ export async function GET(req: NextRequest) {
     take: q ? 20 : undefined,
   });
 
-  return NextResponse.json({ registrations });
+  const blacklistedEmails = new Set(
+    (
+      await prisma.blacklist.findMany({
+        where: { email: { in: registrations.map((r) => r.email) } },
+        select: { email: true },
+      })
+    ).map((b) => b.email),
+  );
+
+  return NextResponse.json(
+    {
+      registrations: registrations.map((r) => ({
+        ...r,
+        isBlacklisted: blacklistedEmails.has(r.email),
+      })),
+    },
+    { headers: { "Cache-Control": "no-store" } },
+  );
 }

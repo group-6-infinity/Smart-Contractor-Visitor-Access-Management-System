@@ -13,10 +13,13 @@ import {
   Search,
   ChevronLeft,
   ChevronRight,
+  UserPlus,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { usePulse } from "@/hooks/use-pulse";
+import { REGISTRATION_FEED_TYPE } from "@/lib/notification-types";
 
 interface NotificationItem {
   id: string;
@@ -66,10 +69,16 @@ const TYPE_ICON: Record<
     className: "bg-info-muted text-info",
     label: "Visit",
   },
+  [REGISTRATION_FEED_TYPE]: {
+    icon: UserPlus,
+    className: "bg-info-muted text-info",
+    label: "Registration",
+  },
 };
 
 const FILTERS = [
   { value: "ALL", label: "All" },
+  { value: REGISTRATION_FEED_TYPE, label: "Registration" },
   { value: "BLACKLIST_ALERT", label: "Blacklist" },
   { value: "REGISTRATION_APPROVED", label: "Approved" },
   { value: "REGISTRATION_REJECTED", label: "Rejected" },
@@ -105,41 +114,46 @@ export default function NotificationCenter() {
     return () => clearTimeout(t);
   }, [search]);
 
-  useEffect(() => {
-    let active = true;
-
-    async function load() {
-      // setLoading dipanggil di dalam async function, tapi masih sinkron di await pertama
-      // trik: await microtask dulu biar keluar dari sync effect body
+  const load = useCallback(
+    async (silent = false) => {
       await Promise.resolve();
-      if (!active) return;
-
-      setLoading(true);
+      if (!silent) setLoading(true);
       try {
-        const params = new URLSearchParams({
-          type,
-          page: String(page),
-        });
+        const params = new URLSearchParams({ type, page: String(page) });
         if (debouncedSearch) params.set("q", debouncedSearch);
 
-        const res = await fetch(`/api/staff/notifications/all?${params}`);
-        if (!res.ok || !active) return;
+        const res = await fetch(`/api/staff/notifications/all?${params}`, {
+          cache: "no-store",
+        });
+        if (!res.ok) return;
         const data = await res.json();
-        if (!active) return;
 
         setItems(data.notifications);
         setTotalPages(data.totalPages);
         setTotal(data.total);
       } finally {
-        if (active) setLoading(false);
+        if (!silent) setLoading(false);
       }
-    }
+    },
+    [type, page, debouncedSearch],
+  );
 
-    load();
+  useEffect(() => {
+    let active = true;
+    async function run() {
+      await Promise.resolve();
+      if (!active) return;
+      await load();
+    }
+    run();
     return () => {
       active = false;
     };
-  }, [type, page, debouncedSearch]);
+  }, [load]);
+
+  const refresh = useCallback(() => load(true), [load]);
+  usePulse("notifications", refresh);
+  usePulse("registrations", refresh);
 
   return (
     <div className="space-y-4">

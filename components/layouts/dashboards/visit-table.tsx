@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { ChevronRight, HardHat, User } from "lucide-react";
 import { formatDateWIB, formatTimeWIB } from "@/lib/datetime";
+import { usePulse } from "@/hooks/use-pulse";
 
 interface VisitRow {
   id: string;
@@ -36,21 +37,35 @@ export default function VisitsTable({
   initialRows: VisitRow[];
 }) {
   const [tab, setTab] = useState<Tab>("ALL");
+  const [rows, setRows] = useState<VisitRow[]>(initialRows);
+
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch("/api/staff/visits", { cache: "no-store" });
+      if (!res.ok) return;
+      const data = await res.json();
+      setRows(data.visits);
+    } catch {
+      // silent
+    }
+  }, []);
+
+  usePulse("visits", load);
 
   const counts = useMemo(
     () => ({
-      ALL: initialRows.length,
-      PENDING: initialRows.filter((r) => r.status === "PENDING").length,
-      APPROVED: initialRows.filter((r) => r.status === "APPROVED").length,
-      REJECTED: initialRows.filter((r) => r.status === "REJECTED").length,
+      ALL: rows.length,
+      PENDING: rows.filter((r) => r.status === "PENDING").length,
+      APPROVED: rows.filter((r) => r.status === "APPROVED").length,
+      REJECTED: rows.filter((r) => r.status === "REJECTED").length,
     }),
-    [initialRows]
+    [rows]
   );
 
   const filtered = useMemo(() => {
-    if (tab === "ALL") return initialRows;
-    return initialRows.filter((r) => r.status === tab);
-  }, [tab, initialRows]);
+    if (tab === "ALL") return rows;
+    return rows.filter((r) => r.status === tab);
+  }, [tab, rows]);
 
   return (
     <div className="space-y-4">

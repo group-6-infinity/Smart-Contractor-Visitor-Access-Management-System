@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { cn } from "@/lib/utils";
 import { LogOut, AlertTriangle, ShieldAlert, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatTimeWIB } from "@/lib/datetime";
+import { usePulse } from "@/hooks/use-pulse";
+import LiveIndicator from "@/components/common/live-indicator";
 
 interface RosterRow {
   id: string;
@@ -38,34 +40,20 @@ export default function InsideRoster() {
   const [loading, setLoading] = useState(true);
   const [checkingOut, setCheckingOut] = useState<string | null>(null);
 
-  async function load() {
+  const load = useCallback(async () => {
     try {
-      const res = await fetch("/api/staff/checkin/roster");
+      const res = await fetch("/api/staff/checkin/roster", {
+        cache: "no-store",
+      });
       if (!res.ok) return;
       const data = await res.json();
       setRoster(data.roster);
     } finally {
       setLoading(false);
     }
-  }
-
-  useEffect(() => {
-    let active = true;
-    async function poll() {
-      await Promise.resolve();
-      if (!active) return;
-      await load();
-    }
-    poll();
-    // refresh tiap 30 detik
-    const interval = setInterval(() => {
-      if (active) load();
-    }, 30000);
-    return () => {
-      active = false;
-      clearInterval(interval);
-    };
   }, []);
+
+  usePulse("inside", load, { initial: true, maxStaleMs: 60000 });
 
   async function handleCheckout(id: string) {
     setCheckingOut(id);
@@ -100,13 +88,16 @@ export default function InsideRoster() {
             </span>
           )}
         </div>
-        <button
-          onClick={load}
-          className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm"
-        >
-          <RefreshCw className="h-4 w-4" />
-          Refresh
-        </button>
+        <div className="flex items-center gap-3">
+          <LiveIndicator />
+          <button
+            onClick={load}
+            className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm"
+          >
+            <RefreshCw className="h-4 w-4" />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {loading ? (

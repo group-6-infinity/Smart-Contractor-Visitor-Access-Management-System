@@ -1,9 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { HardHat, User, DoorOpen, AlertTriangle, Users } from "lucide-react";
 import { formatTimeWIB } from "@/lib/datetime";
+import { isOverstay } from "@/lib/overstay";
+import { usePulse } from "@/hooks/use-pulse";
+import LiveIndicator from "@/components/common/live-indicator";
 
 interface InsideRow {
   id: string;
@@ -17,7 +20,8 @@ interface InsideRow {
   isOverstay: boolean;
 }
 
-const POLL_INTERVAL = 30000;
+const OVERSTAY_RECHECK_MS = 60000;
+
 export default function WhosInsideTable({
   initialRows,
 }: {
@@ -25,29 +29,33 @@ export default function WhosInsideTable({
 }) {
   const [rows, setRows] = useState<InsideRow[]>(initialRows);
   const [loadingId, setLoadingId] = useState<string | null>(null);
+  const [now, setNow] = useState<number | null>(null);
 
-  // polling biar data who's inside update (overstay flag ikut ke-refresh)
-  useEffect(() => {
-    let active = true;
-
-    async function poll() {
-      try {
-        const res = await fetch("/api/staff/whos-inside");
-        if (!res.ok || !active) return;
-        const data = await res.json();
-        if (!active) return;
-        setRows(data.inside);
-      } catch {
-        // silent
-      }
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch("/api/staff/whos-inside", { cache: "no-store" });
+      if (!res.ok) return;
+      const data = await res.json();
+      setRows(data.inside);
+    } catch {
+      // silent
     }
-
-    const interval = setInterval(poll, POLL_INTERVAL);
-    return () => {
-      active = false;
-      clearInterval(interval);
-    };
   }, []);
+
+  usePulse("inside", load);
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), OVERSTAY_RECHECK_MS);
+    return () => clearInterval(id);
+  }, []);
+
+  const displayRows = useMemo(
+    () =>
+      now === null
+        ? rows
+        : rows.map((r) => ({ ...r, isOverstay: isOverstay(r.windowEnd, now) })),
+    [rows, now],
+  );
 
   async function handleCheckout(id: string) {
     setLoadingId(id);
@@ -65,25 +73,35 @@ export default function WhosInsideTable({
     }
   }
 
-  if (rows.length === 0) {
+  if (displayRows.length === 0) {
     return (
-      <div className="text-muted-foreground border-border flex flex-col items-center gap-2 rounded-lg border border-dashed py-16 text-center">
-        <Users className="h-8 w-8 opacity-40" />
-        <p className="text-sm">No one is currently inside.</p>
+      <div className="space-y-3">
+        <div className="flex justify-end">
+          <LiveIndicator />
+        </div>
+        <div className="text-muted-foreground border-border flex flex-col items-center gap-2 rounded-lg border border-dashed py-16 text-center">
+          <Users className="h-8 w-8 opacity-40" />
+          <p className="text-sm">No one is currently inside.</p>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="space-y-3">
-      <div className="text-muted-foreground text-sm">
-        <span className="text-foreground font-semibold">{rows.length}</span>{" "}
-        {rows.length === 1 ? "person" : "people"} inside
-        {rows.some((r) => r.isOverstay) && (
-          <span className="text-destructive ml-2">
-            · {rows.filter((r) => r.isOverstay).length} overstay
-          </span>
-        )}
+      <div className="flex items-center justify-between">
+        <div className="text-muted-foreground text-sm">
+          <span className="text-foreground font-semibold">
+            {displayRows.length}
+          </span>{" "}
+          {displayRows.length === 1 ? "person" : "people"} inside
+          {displayRows.some((r) => r.isOverstay) && (
+            <span className="text-destructive ml-2">
+              · {displayRows.filter((r) => r.isOverstay).length} overstay
+            </span>
+          )}
+        </div>
+        <LiveIndicator />
       </div>
 
       <div className="border-border overflow-hidden rounded-lg border">
@@ -95,7 +113,7 @@ export default function WhosInsideTable({
           <span></span>
         </div>
 
-        {rows.map((r, i) => (
+        {displayRows.map((r, i) => (
           <div
             key={r.id}
             className={`grid grid-cols-[2fr_1.5fr_1.5fr_1fr_auto] items-center gap-4 px-4 py-3 text-sm ${
